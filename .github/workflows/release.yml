@@ -16,13 +16,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Verify Android project exists
-        run: |
-          if [ ! -f ./gradlew ]; then
-            echo "::error::Gradle wrapper ./gradlew is missing. Commit the Android project and Gradle wrapper before creating a release tag."
-            exit 1
-          fi
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -31,12 +24,11 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
+        with:
+          gradle-version: "8.2"
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
       - name: Locate APK
         id: apk
