@@ -1,0 +1,15 @@
+# Gradle
+.gradle/
+**/build/
+
+# Android / local SDK
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Signing keys and secrets
+*.jks
+*.keystore
+key.properties
+.env
