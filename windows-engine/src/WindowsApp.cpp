@@ -1,8 +1,7 @@
-#define UNICODE
-#define _UNICODE
 #include <windows.h>
 #include <commctrl.h>
 #include <mmsystem.h>
+#include <mmreg.h>
 #include <windowsx.h>
 #include "SubOnDsp.h"
 #include <algorithm>
