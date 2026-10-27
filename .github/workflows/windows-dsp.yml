@@ -1,0 +1,29 @@
+name: Windows DSP Engine
+
+on:
+  push:
+    branches: [main, feat/cmp-windows-audio-engine]
+    paths:
+      - "windows-engine/**"
+      - ".github/workflows/windows-dsp.yml"
+  pull_request:
+    paths:
+      - "windows-engine/**"
+      - ".github/workflows/windows-dsp.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S windows-engine -B windows-engine/build -A x64
+
+      - name: Build DSP core
+        run: cmake --build windows-engine/build --config Release
+
+      - name: Run smoke tests
+        run: ctest --test-dir windows-engine/build -C Release --output-on-failure
