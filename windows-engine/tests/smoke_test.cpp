@@ -64,6 +64,33 @@ int main() {
             return EXIT_FAILURE;
         }
 
+        // Disabling the limiter must disable its ceiling rather than silently
+        // clamping the signal. This also verifies that preamp gain is applied.
+        ProcessorConfig noLimiter;
+        noLimiter.preampDb = 12.0;
+        noLimiter.limiterEnabled = false;
+        noLimiter.limiterCeiling = 0.5;
+        AudioProcessor unprotected(noLimiter);
+        const double boosted = unprotected.process(0.5);
+        if (!std::isfinite(boosted) || boosted <= noLimiter.limiterCeiling) {
+            std::cerr << "Disabled limiter unexpectedly applied its ceiling\\n";
+            return EXIT_FAILURE;
+        }
+
+        // A strong transient must remain inside the configured ceiling.
+        ProcessorConfig limiterConfig;
+        limiterConfig.limiterEnabled = true;
+        limiterConfig.limiterCeiling = 0.7;
+        AudioProcessor limited(limiterConfig);
+        for (int i = 0; i < 2000; ++i) {
+            const double input = i == 0 ? 4.0 : 0.05;
+            const double output = limited.process(input);
+            if (!std::isfinite(output) || std::abs(output) > limiterConfig.limiterCeiling) {
+                std::cerr << "Limiter transient/release validation failed\\n";
+                return EXIT_FAILURE;
+            }
+        }
+
         config.sampleRate = 32000.0;
         if (isValidProcessorConfig(config)) {
             std::cerr << "Expected invalid EQ configuration below the highest band Nyquist limit\n";
