@@ -1,21 +1,24 @@
-# SubON Windows Desktop Prototype
+# SubON — Android app + Windows desktop audio player
 
-This is the first native Windows UI prototype and reuses the C++ DSP library.
+SubON is an experimental audio-processing project. The Android app and the Windows desktop player are separate platform implementations that share the goal of configurable audio filtering.
 
-## Included
-- Native Windows desktop window.
-- Bass, treble and preamp controls.
-- Limiter toggle and Flat/Bass Boost presets.
-- Synthetic-signal DSP preview.
-- GitHub Actions build, DSP smoke tests, and downloadable EXE artifact.
+## Windows desktop build
 
-## Important limitation
-**This prototype does not process audio from Windows applications or system output.** It runs a generated test signal through the DSP processor only. It is not yet a system-wide equalizer or the finished v1.0.0 release.
+The Windows target is a native C++ desktop application built with CMake and Visual Studio C++ Build Tools. GitHub Actions compiles it on a hosted Windows runner and uploads a temporary EXE artifact.
 
-System-wide processing requires a separate Windows audio integration layer, installation/registration strategy, compatibility tests and a reversible uninstall path.
+### Current desktop features
+- Open and play supported WAV audio through the Windows audio output.
+- Bass and treble shelves, preamp, 10-band EQ, limiter toggle.
+- Flat, Bass Boost and Vocal starting presets.
+- Native DSP processing using the project's C++ processor.
+
+Supported WAV inputs: mono/stereo, PCM 16/24/32-bit or IEEE float 32-bit, 32–192 kHz. Other formats are not currently supported.
+
+### Important limitation
+**The Windows player processes audio played inside SubON only. It does not intercept or modify audio from other applications or the entire Windows system.** System-wide processing is a separate feature requiring a Windows audio integration/driver or APO architecture, installation and uninstallation handling, signing/compatibility work, and testing. Do not treat this build as a system-wide equalizer.
 
 ## Build on Windows
-Requirements: Visual Studio C++ Build Tools and CMake 3.20+.
+Install Visual Studio C++ Build Tools and CMake 3.20+.
 
 ```powershell
 cmake -S windows-engine -B windows-engine/build -A x64
@@ -23,13 +26,13 @@ cmake --build windows-engine/build --config Release
 ctest --test-dir windows-engine/build -C Release --output-on-failure
 ```
 
-Executable: `windows-engine/build/Release/SubONWindows.exe`.
+The executable is `windows-engine/build/Release/SubONWindows.exe`.
 
-## Download CI build
-Open the repository's Actions tab, choose **Windows Desktop Prototype**, open a successful run, and download artifact `SubON-Windows-x64-prototype`. This is a temporary prototype artifact, not an official release or signed installer.
+## CI artifact
+Open the repository's Actions tab, choose **Windows Desktop Prototype**, open a successful run and download `SubON-Windows-x64-prototype`. CI artifacts expire after 14 days; they are not official signed releases.
 
-## Next
-1. Add the 10-band EQ UI and persistent profiles.
-2. Implement the selected Windows audio integration architecture.
-3. Test actual playback on Windows 10/11.
-4. Then prepare a combined Android APK + Windows release.
+## Android
+The Android application is in `app/` and uses Kotlin, Jetpack Compose and Android audio effects. Android effect attachment and audible behavior vary by device and audio session; system-wide effects are not guaranteed.
+
+## v1.0.0 release gate
+Do not publish v1.0.0 until both platform builds pass, the Windows app has been exercised by automated tests, Android has been built successfully, and release notes accurately describe the supported audio paths.
