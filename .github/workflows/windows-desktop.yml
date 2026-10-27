@@ -2,9 +2,9 @@ name: Windows Desktop Build and Test
 on:
   push:
     branches: [main, feat/windows-desktop-prototype-v1]
-    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml"]
+    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml", ".github/workflows/release.yml"]
   pull_request:
-    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml"]
+    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml", ".github/workflows/release.yml"]
   workflow_dispatch:
 permissions:
   contents: read
