@@ -7,7 +7,6 @@
 namespace subon::dsp {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kLn10Over20 = 0.1151292546497022842;
 
 bool validFilterArgs(double sampleRate, double frequency) noexcept {
     return std::isfinite(sampleRate) && std::isfinite(frequency) &&
