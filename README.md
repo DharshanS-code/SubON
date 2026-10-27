@@ -597,11 +597,15 @@ The release workflow is configured to attach a debug APK to a GitHub Release whe
 
 ## 📄 License
 
-**No license has been selected for this repository yet.**
+**SubON is licensed under the GNU General Public License v3.0 (GPL-3.0).**
 
-Until a license is added, do not assume that you have permission to reuse, modify, redistribute, or incorporate this project's code into another project.
+You are free to use, study, modify, and redistribute this software under the terms of the license.
 
-If you intend to open-source SubON formally, select and add an appropriate license before describing the project as licensed under a particular license.
+If you distribute copies or modified versions of SubON, you must comply with the applicable GPL-3.0 requirements, including providing the corresponding source code and preserving required notices.
+
+See the [LISENCE](https://github.com/DharshanS-code/SubON/LISENCE ). file for the complete license terms.
+
+SPDX-License-Identifier: GPL-3.0-only
 
 ---
 
