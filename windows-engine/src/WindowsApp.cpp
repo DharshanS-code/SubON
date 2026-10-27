@@ -6,6 +6,7 @@
 #include <windowsx.h>
 #include "SubOnDsp.h"
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -158,6 +159,7 @@ void preset(int kind){
 }
 LRESULT CALLBACK wndProc(HWND w,UINT m,WPARAM a,LPARAM l){
  if(m==WM_CREATE){
+  g_window=w;
   g_font=CreateFontW(17,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
   label(L"SubON",24,12,200);label(L"Audio player + 10-band equalizer",24,38,350);
   control(L"BUTTON",L"Open WAV",BS_PUSHBUTTON,24,70,100,30,OPEN_FILE);
