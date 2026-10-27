@@ -1,4 +1,4 @@
-name: Windows Desktop Prototype
+name: Windows Desktop Build and Test
 on:
   push:
     branches: [main, feat/windows-desktop-prototype-v1]
@@ -23,7 +23,7 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path "windows-engine/build/Release/SubONWindows.exe")) { throw "EXE not produced" }
-      - name: Upload prototype EXE
+      - name: Upload Windows x64 build
         uses: actions/upload-artifact@v4
         with:
           name: SubON-Windows-x64-prototype
