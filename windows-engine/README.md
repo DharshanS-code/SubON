@@ -1,41 +1,35 @@
-# SubON Windows Audio Engine
+# SubON Windows Desktop Prototype
 
-This directory contains a **standalone C++ DSP core** intended to be built separately from the Kotlin/Compose application. It provides a low-pass/high-pass biquad chain and a smoke test.
+This is the first native Windows UI prototype and reuses the C++ DSP library.
 
-## Important status
+## Included
+- Native Windows desktop window.
+- Bass, treble and preamp controls.
+- Limiter toggle and Flat/Bass Boost presets.
+- Synthetic-signal DSP preview.
+- GitHub Actions build, DSP smoke tests, and downloadable EXE artifact.
 
-This is **not yet a working system-wide Windows audio effect**. The DSP library processes sample values passed to it; it does not capture or intercept audio from other applications. The Windows system-wide integration layer is a separate Windows Audio Processing Object (APO) component and is not implemented in this initial scaffold.
+## Important limitation
+**This prototype does not process audio from Windows applications or system output.** It runs a generated test signal through the DSP processor only. It is not yet a system-wide equalizer or the finished v1.0.0 release.
 
-Windows system effects are integrated into the Windows audio engine through APOs and typically require COM interfaces, packaging/registration, device compatibility testing, and an installation strategy. Read Microsoft's [APO architecture documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/audio-processing-object-architecture) before implementing that layer.
+System-wide processing requires a separate Windows audio integration layer, installation/registration strategy, compatibility tests and a reversible uninstall path.
 
-## Build the DSP core
-
-Requirements: CMake 3.20+ and a C++17 compiler. On Windows, use a Visual Studio C++ build environment.
-
-From this directory:
+## Build on Windows
+Requirements: Visual Studio C++ Build Tools and CMake 3.20+.
 
 ```powershell
-cmake -S . -B build -A x64
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S windows-engine -B windows-engine/build -A x64
+cmake --build windows-engine/build --config Release
+ctest --test-dir windows-engine/build -C Release --output-on-failure
 ```
 
-The library target is `subon_dsp`; the test target is `subon_dsp_smoke_test`.
+Executable: `windows-engine/build/Release/SubONWindows.exe`.
 
-## Design boundary
+## Download CI build
+Open the repository's Actions tab, choose **Windows Desktop Prototype**, open a successful run, and download artifact `SubON-Windows-x64-prototype`. This is a temporary prototype artifact, not an official release or signed installer.
 
-- **Kotlin/Compose UI:** shared configuration and controls (as the CMP migration proceeds).
-- **Android engine:** remains in the Android source set and continues using Android audio APIs.
-- **Windows DSP core:** this C++ library; built by CMake, not by the Android Gradle task.
-- **Future Windows APO adapter:** native Windows integration that will call the DSP core from the supported real-time processing callbacks.
-- **Desktop app:** a separate Compose Desktop executable that edits settings and communicates with the Windows integration layer once a safe, tested settings bridge exists.
-
-Do not load UI code, allocate memory, perform file/network I/O, or acquire blocking locks from a real-time audio callback. Any settings bridge must use bounded, real-time-safe data transfer and validate all parameters.
-
-## Current limitations
-
-- No APO COM adapter or system effect registration is included.
-- No system-wide audio capture or routing is included.
-- No installer or driver package is included.
-- The filter chain is a basic DSP primitive and has not yet been tuned or validated for production audio.
-- This target must not be described as system-wide until the APO integration is implemented, packaged, installed, and tested on supported Windows versions and devices.
+## Next
+1. Add the 10-band EQ UI and persistent profiles.
+2. Implement the selected Windows audio integration architecture.
+3. Test actual playback on Windows 10/11.
+4. Then prepare a combined Android APK + Windows release.
