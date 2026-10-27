@@ -6,15 +6,6 @@
 namespace subon::dsp {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-
-Biquad makeBiquad(double b0, double b1, double b2,
-                  double a0, double a1, double a2) {
-    if (!std::isfinite(a0) || std::abs(a0) < 1e-12) {
-        throw std::invalid_argument("Invalid biquad normalization coefficient");
-    }
-    // Normalize denominator so a0 = 1.
-    return Biquad::lowPass(48000.0, 1000.0); // replaced by caller-specific construction below
-}
 } // namespace
 
 Biquad::Biquad(double b0, double b1, double b2, double a1, double a2) noexcept
