@@ -102,6 +102,8 @@ void playback(){
  const std::size_t totalFrames=g_wav.pcm.size()/frameBytes;
  const std::size_t chunkFrames=4096;
  subon::dsp::AudioProcessor left, right;
+ subon::dsp::ProcessorConfig appliedCfg{};
+ bool hasAppliedCfg=false;
  std::size_t frame=g_position;
  while(!g_stop&&frame<totalFrames){
   const std::size_t count=(std::min)(chunkFrames,totalFrames-frame);
@@ -109,8 +111,6 @@ void playback(){
   subon::dsp::ProcessorConfig cfg;snapshotConfig(cfg);cfg.sampleRate=fmt.nSamplesPerSec;
   // Reconfigure only when controls actually change. configure() resets filter
   // histories, so doing it for every block causes audible discontinuities.
-  static subon::dsp::ProcessorConfig appliedCfg{};
-  static bool hasAppliedCfg=false;
   const auto sameConfig=[](const subon::dsp::ProcessorConfig& a,const subon::dsp::ProcessorConfig& b){
    if(a.sampleRate!=b.sampleRate||a.preampDb!=b.preampDb||a.bassDb!=b.bassDb||
       a.trebleDb!=b.trebleDb||a.limiterEnabled!=b.limiterEnabled||
