@@ -107,7 +107,22 @@ void playback(){
   const std::size_t count=(std::min)(chunkFrames,totalFrames-frame);
   std::vector<std::uint8_t> output(count*frameBytes);
   subon::dsp::ProcessorConfig cfg;snapshotConfig(cfg);cfg.sampleRate=fmt.nSamplesPerSec;
-  try{left.configure(cfg);right.configure(cfg);}catch(...){std::memcpy(output.data(),g_wav.pcm.data()+frame*frameBytes,output.size());}
+  // Reconfigure only when controls actually change. configure() resets filter
+  // histories, so doing it for every block causes audible discontinuities.
+  static subon::dsp::ProcessorConfig appliedCfg{};
+  static bool hasAppliedCfg=false;
+  const auto sameConfig=[](const subon::dsp::ProcessorConfig& a,const subon::dsp::ProcessorConfig& b){
+   if(a.sampleRate!=b.sampleRate||a.preampDb!=b.preampDb||a.bassDb!=b.bassDb||
+      a.trebleDb!=b.trebleDb||a.limiterEnabled!=b.limiterEnabled||
+      a.limiterCeiling!=b.limiterCeiling)return false;
+   for(std::size_t j=0;j<a.equalizerDb.size();++j)if(a.equalizerDb[j]!=b.equalizerDb[j])return false;
+   return true;
+  };
+  try{
+   if(!hasAppliedCfg||!sameConfig(cfg,appliedCfg)){
+    left.configure(cfg);right.configure(cfg);appliedCfg=cfg;hasAppliedCfg=true;
+   }
+  }catch(...){std::memcpy(output.data(),g_wav.pcm.data()+frame*frameBytes,output.size());}
   const int bytesPerSample=fmt.wBitsPerSample/8;
   for(std::size_t i=0;i<count&&!g_stop;++i){
    for(unsigned ch=0;ch<fmt.nChannels;++ch){
