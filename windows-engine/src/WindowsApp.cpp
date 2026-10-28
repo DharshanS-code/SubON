@@ -56,7 +56,7 @@ bool readWav(const std::wstring& path,WavData& out,std::wstring& error){
  f.read(riff,4);f.read(reinterpret_cast<char*>(&riffSize),4);f.read(wave,4);
  if(!f||std::memcmp(riff,"RIFF",4)||std::memcmp(wave,"WAVE",4)){error=L"Choose a valid RIFF/WAVE file.";return false;}
  bool gotFmt=false,gotData=false;WAVEFORMATEX fmt{};std::vector<std::uint8_t> data;
- while(f&&!gotData){
+ while(f&&(!gotFmt||!gotData)){
   char id[4];std::uint32_t size=0;f.read(id,4);f.read(reinterpret_cast<char*>(&size),4);if(!f)break;
   if(!std::memcmp(id,"fmt ",4)){
    if(size<16||size>4096){error=L"Unsupported WAV format chunk.";return false;}
