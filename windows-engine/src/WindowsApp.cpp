@@ -60,18 +60,18 @@ bool readWav(const std::wstring& path,WavData& out,std::wstring& error){
  }
  f.seekg(0,std::ios::end);const auto fileEnd=f.tellg();
  const std::uint64_t riffEnd=8ull+riffSize;
- if(fileEnd<0||riffEnd>static_cast<std::uint64_t>(fileEnd)){
+ if(fileEnd==std::streampos(-1)||riffEnd>static_cast<std::uint64_t>(static_cast<std::streamoff>(fileEnd))){
   error=L"WAV file is truncated or has an invalid RIFF size.";return false;
  }
  f.seekg(12,std::ios::beg);
  bool gotFmt=false,gotData=false;WAVEFORMATEX fmt{};std::vector<std::uint8_t> data;
  while(f&&(!gotFmt||!gotData)){
   const auto chunkHeaderPos=f.tellg();
-  if(chunkHeaderPos<0||static_cast<std::uint64_t>(chunkHeaderPos)+8>riffEnd)break;
+  if(chunkHeaderPos==std::streampos(-1)||static_cast<std::uint64_t>(static_cast<std::streamoff>(chunkHeaderPos))+8>riffEnd)break;
   char id[4];std::uint32_t size=0;
   f.read(id,4);f.read(reinterpret_cast<char*>(&size),4);if(!f)break;
   const auto payloadPos=f.tellg();
-  if(payloadPos<0||static_cast<std::uint64_t>(payloadPos)+size+(size&1u)>riffEnd){
+  if(payloadPos==std::streampos(-1)||static_cast<std::uint64_t>(static_cast<std::streamoff>(payloadPos))+size+(size&1u)>riffEnd){
    error=L"WAV file contains a truncated or out-of-bounds chunk.";return false;
   }
   if(!std::memcmp(id,"fmt ",4)){
