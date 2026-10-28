@@ -1,4 +1,4 @@
-name: Build and publish APK
+name: Build and publish Android + Windows artifacts
 
 on:
   push:
@@ -10,7 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  android:
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -30,19 +31,83 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug
 
-      - name: Locate APK
-        id: apk
+      - name: Stage APK
         shell: bash
         run: |
-          APK_PATH="$(find . -type f -path '*/build/outputs/apk/*/*.apk' | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
-            echo "::error::Build finished but no APK was found."
-            exit 1
-          fi
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK_PATH" || { echo "::error::Expected APK not found: $APK_PATH"; exit 1; }
+          mkdir -p release-assets
+          cp "$APK_PATH" release-assets/SubON-Android-debug.apk
 
-      - name: Publish APK to GitHub Release
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubON-Android
+          path: release-assets/SubON-Android-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Build Windows x64 desktop app
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S windows-engine -B windows-engine/build -A x64
+
+      - name: Build DSP and desktop app
+        run: cmake --build windows-engine/build --config Release
+
+      - name: Run DSP tests
+        run: ctest --test-dir windows-engine/build -C Release --output-on-failure
+
+      - name: Stage Windows executable
+        shell: pwsh
+        run: |
+          $exe = "windows-engine/build/Release/SubONWindows.exe"
+          if (!(Test-Path $exe)) { throw "Windows executable not produced: $exe" }
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item $exe "release-assets/SubON-Windows-x64-prototype.exe"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubON-Windows-x64
+          path: release-assets/SubON-Windows-x64-prototype.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish combined release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SubON-Android
+          path: release-assets
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SubON-Windows-x64
+          path: release-assets
+
+      - name: Verify both release assets exist
+        shell: bash
+        run: |
+          test -s release-assets/SubON-Android-debug.apk
+          test -s release-assets/SubON-Windows-x64-prototype.exe
+          ls -lh release-assets
+
+      - name: Publish assets to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            release-assets/SubON-Android-debug.apk
+            release-assets/SubON-Windows-x64-prototype.exe
           generate_release_notes: true

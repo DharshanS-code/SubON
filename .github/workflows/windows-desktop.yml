@@ -1,0 +1,32 @@
+name: Windows Desktop Build and Test
+on:
+  push:
+    branches: [main, feat/windows-desktop-prototype-v1]
+    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml", ".github/workflows/release.yml"]
+  pull_request:
+    paths: ["windows-engine/**", ".github/workflows/windows-desktop.yml", ".github/workflows/release.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -S windows-engine -B windows-engine/build -A x64
+      - name: Build DSP and desktop app
+        run: cmake --build windows-engine/build --config Release
+      - name: Run DSP tests
+        run: ctest --test-dir windows-engine/build -C Release --output-on-failure
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path "windows-engine/build/Release/SubONWindows.exe")) { throw "EXE not produced" }
+      - name: Upload Windows x64 build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubON-Windows-x64-prototype
+          path: windows-engine/build/Release/SubONWindows.exe
+          if-no-files-found: error
+          retention-days: 14

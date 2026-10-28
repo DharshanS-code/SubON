@@ -114,8 +114,24 @@ double AudioProcessor::process(double input) noexcept {
     for (auto& band : equalizer_) output = band.process(output);
     output = trebleShelf_.process(output);
     if (!std::isfinite(output)) return 0.0;
-    if (config_.limiterEnabled)
+    if (config_.limiterEnabled) {
+        // Instant attack prevents an over-ceiling peak from passing through;
+        // a slower release avoids reopening gain immediately after each peak.
+        const double peak = std::abs(output);
+        constexpr double release = 0.9995;
+        limiterEnvelope_ = peak >= limiterEnvelope_
+            ? peak
+            : (std::max)(peak, limiterEnvelope_ * release);
+
+        if (limiterEnvelope_ > config_.limiterCeiling) {
+            output *= config_.limiterCeiling / limiterEnvelope_;
+        }
+
+        // Safety ceiling for extreme transients and floating-point edge cases.
         output = std::clamp(output, -config_.limiterCeiling, config_.limiterCeiling);
+    } else {
+        limiterEnvelope_ = 0.0;
+    }
     return output;
 }
 

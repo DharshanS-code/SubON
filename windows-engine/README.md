@@ -1,41 +1,38 @@
-# SubON Windows Audio Engine
+# SubON — Android app + Windows desktop audio player
 
-This directory contains a **standalone C++ DSP core** intended to be built separately from the Kotlin/Compose application. It provides a low-pass/high-pass biquad chain and a smoke test.
+SubON is an experimental audio-processing project. The Android app and the Windows desktop player are separate platform implementations that share the goal of configurable audio filtering.
 
-## Important status
+## Windows desktop build
 
-This is **not yet a working system-wide Windows audio effect**. The DSP library processes sample values passed to it; it does not capture or intercept audio from other applications. The Windows system-wide integration layer is a separate Windows Audio Processing Object (APO) component and is not implemented in this initial scaffold.
+The Windows target is a native C++ desktop application built with CMake and Visual Studio C++ Build Tools. GitHub Actions compiles it on a hosted Windows runner and uploads a temporary EXE artifact.
 
-Windows system effects are integrated into the Windows audio engine through APOs and typically require COM interfaces, packaging/registration, device compatibility testing, and an installation strategy. Read Microsoft's [APO architecture documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/audio-processing-object-architecture) before implementing that layer.
+### Current desktop features
+- Open and play supported WAV audio through the Windows audio output.
+- Bass and treble shelves, preamp, 10-band EQ, limiter toggle.
+- Flat, Bass Boost and Vocal starting presets.
+- Native DSP processing using the project's C++ processor.
 
-## Build the DSP core
+Supported WAV inputs: mono/stereo, PCM 16/24/32-bit or IEEE float 32-bit, 32–192 kHz. Other formats are not currently supported.
 
-Requirements: CMake 3.20+ and a C++17 compiler. On Windows, use a Visual Studio C++ build environment.
+### Important limitation
+**The Windows player processes audio played inside SubON only. It does not intercept or modify audio from other applications or the entire Windows system.** System-wide processing is a separate feature requiring a Windows audio integration/driver or APO architecture, installation and uninstallation handling, signing/compatibility work, and testing. Do not treat this build as a system-wide equalizer.
 
-From this directory:
+## Build on Windows
+Install Visual Studio C++ Build Tools and CMake 3.20+.
 
 ```powershell
-cmake -S . -B build -A x64
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S windows-engine -B windows-engine/build -A x64
+cmake --build windows-engine/build --config Release
+ctest --test-dir windows-engine/build -C Release --output-on-failure
 ```
 
-The library target is `subon_dsp`; the test target is `subon_dsp_smoke_test`.
+The executable is `windows-engine/build/Release/SubONWindows.exe`.
 
-## Design boundary
+## CI artifact
+Open the repository's Actions tab, choose **Windows Desktop Prototype**, open a successful run and download `SubON-Windows-x64-prototype`. CI artifacts expire after 14 days; they are not official signed releases.
 
-- **Kotlin/Compose UI:** shared configuration and controls (as the CMP migration proceeds).
-- **Android engine:** remains in the Android source set and continues using Android audio APIs.
-- **Windows DSP core:** this C++ library; built by CMake, not by the Android Gradle task.
-- **Future Windows APO adapter:** native Windows integration that will call the DSP core from the supported real-time processing callbacks.
-- **Desktop app:** a separate Compose Desktop executable that edits settings and communicates with the Windows integration layer once a safe, tested settings bridge exists.
+## Android
+The Android application is in `app/` and uses Kotlin, Jetpack Compose and Android audio effects. Android effect attachment and audible behavior vary by device and audio session; system-wide effects are not guaranteed.
 
-Do not load UI code, allocate memory, perform file/network I/O, or acquire blocking locks from a real-time audio callback. Any settings bridge must use bounded, real-time-safe data transfer and validate all parameters.
-
-## Current limitations
-
-- No APO COM adapter or system effect registration is included.
-- No system-wide audio capture or routing is included.
-- No installer or driver package is included.
-- The filter chain is a basic DSP primitive and has not yet been tuned or validated for production audio.
-- This target must not be described as system-wide until the APO integration is implemented, packaged, installed, and tested on supported Windows versions and devices.
+## v1.0.0 release gate
+Do not publish v1.0.0 until both platform builds pass, the Windows app has been exercised by automated tests, Android has been built successfully, and release notes accurately describe the supported audio paths.

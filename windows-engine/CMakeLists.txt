@@ -1,27 +1,31 @@
 cmake_minimum_required(VERSION 3.20)
 project(SubOnWindowsEngine VERSION 0.1.0 LANGUAGES CXX)
-
 option(SUBON_BUILD_TESTS "Build native DSP smoke tests" ON)
-
-add_library(subon_dsp STATIC
-    src/SubOnDsp.cpp
-)
+option(SUBON_BUILD_DESKTOP_APP "Build Windows desktop prototype" ON)
+add_library(subon_dsp STATIC src/SubOnDsp.cpp)
 target_include_directories(subon_dsp PUBLIC include)
 target_compile_features(subon_dsp PUBLIC cxx_std_17)
-set_target_properties(subon_dsp PROPERTIES
-    CXX_EXTENSIONS OFF
-    POSITION_INDEPENDENT_CODE ON
-)
-
+set_target_properties(subon_dsp PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON)
 if(MSVC)
-    target_compile_options(subon_dsp PRIVATE /W4 /permissive-)
+ target_compile_options(subon_dsp PRIVATE /W4 /permissive-)
 else()
-    target_compile_options(subon_dsp PRIVATE -Wall -Wextra -Wpedantic)
+ target_compile_options(subon_dsp PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-
 if(SUBON_BUILD_TESTS)
-    enable_testing()
-    add_executable(subon_dsp_smoke_test tests/smoke_test.cpp)
-    target_link_libraries(subon_dsp_smoke_test PRIVATE subon_dsp)
-    add_test(NAME subon_dsp_smoke_test COMMAND subon_dsp_smoke_test)
+ enable_testing()
+ add_executable(subon_dsp_smoke_test tests/smoke_test.cpp)
+ target_link_libraries(subon_dsp_smoke_test PRIVATE subon_dsp)
+ add_test(NAME subon_dsp_smoke_test COMMAND subon_dsp_smoke_test)
+ add_executable(subon_interleaved_float_test tests/interleaved_float_test.cpp)
+ target_link_libraries(subon_interleaved_float_test PRIVATE subon_dsp)
+ add_test(NAME subon_interleaved_float_test COMMAND subon_interleaved_float_test)
+endif()
+if(WIN32 AND SUBON_BUILD_DESKTOP_APP)
+ add_executable(SubONWindows WIN32 src/WindowsApp.cpp)
+ target_link_libraries(SubONWindows PRIVATE subon_dsp comctl32 comdlg32 winmm)
+ target_compile_features(SubONWindows PRIVATE cxx_std_17)
+ target_compile_definitions(SubONWindows PRIVATE UNICODE _UNICODE)
+ if(MSVC)
+  target_compile_options(SubONWindows PRIVATE /W4 /permissive-)
+ endif()
 endif()
