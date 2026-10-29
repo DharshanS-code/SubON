@@ -1,16 +1,17 @@
 #include "SubOnApoDspBridge.h"
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <ksmedia.h>
 #include <wrl/client.h>
 
 #include <algorithm>
 #include <iostream>
 #include <string>
-#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -74,8 +75,8 @@ int wmain() {
 
     auto virtualEndpoint = findVirtualRenderEndpoint(enumerator.Get());
     if (!virtualEndpoint) {
-        std::wcerr << L"SubON virtual render endpoint was not found. Install a supported "
-                      L"virtual audio driver and name its playback endpoint 'SubON Virtual Audio'.\n";
+        std::wcerr << L"SubON virtual render endpoint was not found. A compatible virtual audio driver "
+                      L"must create an active playback endpoint named 'SubON Virtual Audio'.\n";
         CoUninitialize();
         return 2;
     }
@@ -98,7 +99,7 @@ int wmain() {
         captureFormat->nBlockAlign != captureFormat->nChannels * sizeof(float)) {
         CoTaskMemFree(captureFormat);
         CoUninitialize();
-        std::wcerr << L"Unsupported endpoint mix format. This first router accepts interleaved float32 only.\n";
+        std::wcerr << L"Unsupported virtual endpoint format; this prototype accepts interleaved float32 only.\n";
         return 3;
     }
 
@@ -116,11 +117,11 @@ int wmain() {
         CoTaskMemFree(renderMix);
         CoTaskMemFree(captureFormat);
         CoUninitialize();
-        std::wcerr << L"Virtual and physical endpoint formats differ. Format conversion is not yet implemented.\n";
+        std::wcerr << L"Virtual and physical endpoint formats differ; format conversion is not implemented.\n";
         return 4;
     }
 
-    const REFERENCE_TIME bufferDuration = 200000; // 20 ms
+    const REFERENCE_TIME bufferDuration = 200000;
     hr = captureClient->Initialize(AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_LOOPBACK, bufferDuration, 0, captureFormat, nullptr);
     if (FAILED(hr)) { CoTaskMemFree(renderMix); CoTaskMemFree(captureFormat); CoUninitialize(); return fail(L"Cannot initialize loopback capture", hr); }
@@ -157,11 +158,14 @@ int wmain() {
         DWORD flags = 0;
         hr = capture->GetBuffer(&inputBytes, &frames, &flags, nullptr, nullptr);
         if (FAILED(hr)) break;
+
         UINT32 padding = 0;
         hr = renderClient->GetCurrentPadding(&padding);
         if (FAILED(hr)) { capture->ReleaseBuffer(frames); break; }
-        const UINT32 renderCapacity = renderMix->nSamplesPerSec / 20;
-        const UINT32 writable = renderCapacity > padding ? renderCapacity - padding : 0;
+        UINT32 renderBufferFrames = 0;
+        hr = renderClient->GetBufferSize(&renderBufferFrames);
+        if (FAILED(hr)) { capture->ReleaseBuffer(frames); break; }
+        const UINT32 writable = renderBufferFrames > padding ? renderBufferFrames - padding : 0;
         const UINT32 count = std::min(frames, writable);
         if (count > 0) {
             BYTE* outputBytes = nullptr;
@@ -176,6 +180,8 @@ int wmain() {
             }
             render->ReleaseBuffer(count, 0);
         }
+        // If the render endpoint is temporarily full, this prototype drops the
+        // unrendered tail. A production version needs a bounded FIFO and drift handling.
         capture->ReleaseBuffer(frames);
     }
 
