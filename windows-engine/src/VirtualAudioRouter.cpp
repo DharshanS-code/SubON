@@ -226,10 +226,11 @@ int wmain() {
 
         const auto* input = reinterpret_cast<const float*>(inputBytes);
         if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
+            const auto silentFrames = std::min<std::size_t>(frames, fifoCapacityFrames);
             std::fill(queuedSamples.begin(),
-                      queuedSamples.begin() + static_cast<std::size_t>(frames) * captureFormat->nChannels,
+                      queuedSamples.begin() + silentFrames * captureFormat->nChannels,
                       0.0f);
-            fifo.push(queuedSamples.data(), frames);
+            fifo.push(queuedSamples.data(), silentFrames);
         } else {
             fifo.push(input, frames);
         }
