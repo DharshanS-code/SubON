@@ -10,12 +10,77 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <atomic>
+#include <csignal>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
 namespace {
+std::atomic<bool> g_running{true};
+
+void handleConsoleSignal(int) {
+    g_running.store(false, std::memory_order_relaxed);
+}
+
+// Single-threaded bounded FIFO in frames. The router copies capture data before
+// releasing WASAPI's packet, then drains only as many frames as the render
+// endpoint can accept. On overflow, discard the oldest frames to keep latency
+// bounded rather than letting delay grow without limit.
+class AudioFrameFifo {
+public:
+    AudioFrameFifo(std::size_t capacityFrames, std::size_t channels)
+        : capacityFrames_(capacityFrames), channels_(channels),
+          samples_(capacityFrames * channels, 0.0f) {}
+
+    std::size_t size() const { return sizeFrames_; }
+    std::size_t capacity() const { return capacityFrames_; }
+
+    void push(const float* input, std::size_t frames) {
+        if (!input || frames == 0 || capacityFrames_ == 0) return;
+        if (frames >= capacityFrames_) {
+            input += (frames - capacityFrames_) * channels_;
+            frames = capacityFrames_;
+            readFrame_ = writeFrame_ = sizeFrames_ = 0;
+        }
+        if (sizeFrames_ + frames > capacityFrames_) {
+            const auto discard = sizeFrames_ + frames - capacityFrames_;
+            readFrame_ = (readFrame_ + discard) % capacityFrames_;
+            sizeFrames_ -= discard;
+        }
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const auto dstFrame = (writeFrame_ + frame) % capacityFrames_;
+            std::copy_n(input + frame * channels_, channels_,
+                        samples_.data() + dstFrame * channels_);
+        }
+        writeFrame_ = (writeFrame_ + frames) % capacityFrames_;
+        sizeFrames_ += frames;
+    }
+
+    std::size_t pop(float* output, std::size_t frames) {
+        if (!output || frames == 0) return 0;
+        const auto count = std::min(frames, sizeFrames_);
+        for (std::size_t frame = 0; frame < count; ++frame) {
+            const auto srcFrame = (readFrame_ + frame) % capacityFrames_;
+            std::copy_n(samples_.data() + srcFrame * channels_, channels_,
+                        output + frame * channels_);
+        }
+        readFrame_ = (readFrame_ + count) % capacityFrames_;
+        sizeFrames_ -= count;
+        return count;
+    }
+
+private:
+    std::size_t capacityFrames_;
+    std::size_t channels_;
+    std::vector<float> samples_;
+    std::size_t readFrame_ = 0;
+    std::size_t writeFrame_ = 0;
+    std::size_t sizeFrames_ = 0;
+};
+
 constexpr wchar_t kVirtualEndpointHint[] = L"SubON Virtual Audio";
 
 std::wstring friendlyName(IMMDevice* device) {
@@ -159,30 +224,36 @@ int wmain() {
         hr = capture->GetBuffer(&inputBytes, &frames, &flags, nullptr, nullptr);
         if (FAILED(hr)) break;
 
+        const auto* input = reinterpret_cast<const float*>(inputBytes);
+        if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
+            std::fill(queuedSamples.begin(),
+                      queuedSamples.begin() + static_cast<std::size_t>(frames) * captureFormat->nChannels,
+                      0.0f);
+            fifo.push(queuedSamples.data(), frames);
+        } else {
+            fifo.push(input, frames);
+        }
+        hr = capture->ReleaseBuffer(frames);
+        if (FAILED(hr)) break;
+
         UINT32 padding = 0;
         hr = renderClient->GetCurrentPadding(&padding);
-        if (FAILED(hr)) { capture->ReleaseBuffer(frames); break; }
+        if (FAILED(hr)) break;
         UINT32 renderBufferFrames = 0;
         hr = renderClient->GetBufferSize(&renderBufferFrames);
-        if (FAILED(hr)) { capture->ReleaseBuffer(frames); break; }
+        if (FAILED(hr)) break;
         const UINT32 writable = renderBufferFrames > padding ? renderBufferFrames - padding : 0;
-        const UINT32 count = std::min(frames, writable);
+        const auto count = static_cast<UINT32>(std::min<std::size_t>(writable, fifo.size()));
         if (count > 0) {
             BYTE* outputBytes = nullptr;
             hr = render->GetBuffer(count, &outputBytes);
-            if (FAILED(hr)) { capture->ReleaseBuffer(frames); break; }
+            if (FAILED(hr)) break;
             auto* output = reinterpret_cast<float*>(outputBytes);
-            const auto* input = reinterpret_cast<const float*>(inputBytes);
-            if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
-                std::fill(output, output + count * captureFormat->nChannels, 0.0f);
-            } else {
-                dsp.process(input, output, count, captureFormat->nChannels, true);
-            }
-            render->ReleaseBuffer(count, 0);
+            fifo.pop(queuedSamples.data(), count);
+            dsp.process(queuedSamples.data(), output, count, captureFormat->nChannels, true);
+            hr = render->ReleaseBuffer(count, 0);
+            if (FAILED(hr)) break;
         }
-        // If the render endpoint is temporarily full, this prototype drops the
-        // unrendered tail. A production version needs a bounded FIFO and drift handling.
-        capture->ReleaseBuffer(frames);
     }
 
     captureClient->Stop();
