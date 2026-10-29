@@ -58,7 +58,7 @@ public:
 
 private:
     std::size_t channels_;
-    std::array<AudioProcessor, kMaxChannels> processors_{};
+    std::array<AudioProcessor, kMaxChannels> processors_;
 };
 
 } // namespace subon::dsp
