@@ -19,10 +19,10 @@ public:
     explicit InterleavedFloatProcessor(const ProcessorConfig& config,
                                        std::size_t channels)
         : channels_(channels),
-          processors_{AudioProcessor(config), AudioProcessor(config),
-                      AudioProcessor(config), AudioProcessor(config),
-                      AudioProcessor(config), AudioProcessor(config),
-                      AudioProcessor(config), AudioProcessor(config)} {
+          processors_{{AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config)}} {
         if (channels == 0 || channels > kMaxChannels) {
             throw std::invalid_argument("Unsupported channel count");
         }
