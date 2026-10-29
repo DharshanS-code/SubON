@@ -18,7 +18,11 @@ public:
 
     explicit InterleavedFloatProcessor(const ProcessorConfig& config,
                                        std::size_t channels)
-        : channels_(channels) {
+        : channels_(channels),
+          processors_{{AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config),
+                       AudioProcessor(config), AudioProcessor(config)}} {
         if (channels == 0 || channels > kMaxChannels) {
             throw std::invalid_argument("Unsupported channel count");
         }
@@ -57,7 +61,7 @@ public:
 
 private:
     std::size_t channels_;
-    std::array<AudioProcessor, kMaxChannels> processors_{};
+    std::array<AudioProcessor, kMaxChannels> processors_;
 };
 
 } // namespace subon::dsp
