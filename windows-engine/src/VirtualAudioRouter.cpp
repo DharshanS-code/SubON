@@ -211,8 +211,14 @@ int wmain() {
         CoUninitialize(); return fail(L"Cannot start audio streams", hr);
     }
 
+    const std::size_t fifoCapacityFrames = static_cast<std::size_t>(captureFormat->nSamplesPerSec) * 2;
+    AudioFrameFifo fifo(fifoCapacityFrames, captureFormat->nChannels);
+    std::vector<float> queuedSamples(fifoCapacityFrames * captureFormat->nChannels, 0.0f);
+
+    std::signal(SIGINT, handleConsoleSignal);
+    std::signal(SIGTERM, handleConsoleSignal);
     std::wcout << L"SubON virtual-audio router running. Press Ctrl+C to stop.\n";
-    while (true) {
+    while (g_running.load(std::memory_order_relaxed)) {
         UINT32 packetFrames = 0;
         hr = capture->GetNextPacketSize(&packetFrames);
         if (FAILED(hr)) break;
