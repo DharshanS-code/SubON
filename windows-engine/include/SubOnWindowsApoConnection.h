@@ -1,20 +1,35 @@
 #pragma once
 
-// Windows-only adapter between the Windows Audio Processing Object (APO)
-// connection buffers and the platform-neutral SubON real-time DSP processor.
-// Include this header only in a WDK/Windows SDK APO target.
+// Windows-only adapter between Windows APO connection buffers and the
+// platform-neutral SubON real-time DSP processor.
 #include "SubOnApoRealtimeProcessor.h"
 
 #include <Windows.h>
 #include <mmreg.h>
 #include <ks.h>
-#include <ksmedia.h>
+#include <initguid.h>
 #include <audioenginebaseapo.h>
 
 #include <cstddef>
 #include <cstdint>
 
 namespace subon::apo::windows {
+
+inline bool isIeeeFloatSubFormat(const GUID& format) noexcept {
+    // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, expressed directly to avoid pulling
+    // ksmedia.h's GUID declaration machinery into this adapter.
+    return format.Data1 == 0x00000003 &&
+           format.Data2 == 0x0000 &&
+           format.Data3 == 0x0010 &&
+           format.Data4[0] == 0x80 &&
+           format.Data4[1] == 0x00 &&
+           format.Data4[2] == 0x00 &&
+           format.Data4[3] == 0xAA &&
+           format.Data4[4] == 0x00 &&
+           format.Data4[5] == 0x38 &&
+           format.Data4[6] == 0x9B &&
+           format.Data4[7] == 0x71;
+}
 
 inline bool describeFloat32Format(const WAVEFORMATEX* waveFormat,
                                   AudioFormat& result) noexcept {
@@ -31,7 +46,7 @@ inline bool describeFloat32Format(const WAVEFORMATEX* waveFormat,
         }
         const auto* extensible =
             reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(waveFormat);
-        isFloat = extensible->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT &&
+        isFloat = isIeeeFloatSubFormat(extensible->SubFormat) &&
                   extensible->Samples.wValidBitsPerSample == 32;
     }
 
@@ -57,7 +72,7 @@ inline HRESULT processConnectionBuffer(
     bool effectsEnabled) noexcept {
 
     if (negotiatedFormat == nullptr || input == nullptr || output == nullptr ||
-        output->pBuffer == nullptr) {
+        output->pBuffer == 0) {
         return E_POINTER;
     }
 
@@ -76,13 +91,18 @@ inline HRESULT processConnectionBuffer(
     if (input->u32BufferFlags == BUFFER_SILENT) {
         state = BufferState::Silent;
     } else if (input->u32BufferFlags == BUFFER_VALID) {
+        if (input->pBuffer == 0) {
+            return E_POINTER;
+        }
         state = BufferState::Valid;
     } else {
         return E_INVALIDARG;
     }
 
-    const auto* source = reinterpret_cast<const float*>(input->pBuffer);
-    auto* destination = reinterpret_cast<float*>(output->pBuffer);
+    const auto* source = reinterpret_cast<const float*>(
+        static_cast<std::uintptr_t>(input->pBuffer));
+    auto* destination = reinterpret_cast<float*>(
+        static_cast<std::uintptr_t>(output->pBuffer));
 
     if (!processor.process(source, destination, frames, format, state,
                            effectsEnabled)) {
