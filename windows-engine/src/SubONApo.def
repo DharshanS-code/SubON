@@ -1,0 +1,5 @@
+; Explicit undecorated COM entry points required by COM activation.
+LIBRARY SubONApo
+EXPORTS
+    DllGetClassObject
+    DllCanUnloadNow
