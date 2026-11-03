@@ -64,8 +64,8 @@ public:
         if (!p) return E_OUTOFMEMORY;
         ZeroMemory(p, bytes);
         p->clsid = CLSID_SubONApo;
-        p->Flags = APO_FLAG_INPLACE | APO_FLAG_SAMPLESPERFRAME_MUST_MATCH |
-                   APO_FLAG_FRAMESPERSECOND_MUST_MATCH | APO_FLAG_BITSPERSAMPLE_MUST_MATCH;
+        p->Flags = static_cast<APO_FLAG>(APO_FLAG_INPLACE | APO_FLAG_SAMPLESPERFRAME_MUST_MATCH |
+                   APO_FLAG_FRAMESPERSECOND_MUST_MATCH | APO_FLAG_BITSPERSAMPLE_MUST_MATCH);
         wcscpy_s(p->szFriendlyName, L"SubON System Audio");
         wcscpy_s(p->szCopyrightInfo, L"SubON");
         p->u32MajorVersion = 1;
@@ -193,8 +193,7 @@ private:
 };
 }
 
-extern "C" HRESULT __declspec(dllexport) WINAPI DllGetClassObject(
-    REFCLSID clsid, REFIID iid, void** out) {
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
     if (!IsEqualCLSID(clsid, CLSID_SubONApo)) return CLASS_E_CLASSNOTAVAILABLE;
     auto* factory = new (std::nothrow) ClassFactory();
     if (!factory) return E_OUTOFMEMORY;
@@ -202,6 +201,6 @@ extern "C" HRESULT __declspec(dllexport) WINAPI DllGetClassObject(
     factory->Release();
     return hr;
 }
-extern "C" HRESULT __declspec(dllexport) WINAPI DllCanUnloadNow() {
+STDAPI DllCanUnloadNow() {
     return (g_objects.load() == 0 && g_locks.load() == 0) ? S_OK : S_FALSE;
 }
