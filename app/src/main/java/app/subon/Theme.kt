@@ -5,13 +5,15 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-val Zaffre = Color(0xFF1826A4)
-val ZaffreDark = Color(0xFF121C85)
-val Periwinkle = Color(0xFF5C7BC6)
+// Shared visual tokens: docs/design-system.md and WindowsApp.cpp.
+val Zaffre = Color(0xFF10141C)
+val ZaffreDark = Color(0xFF1B2230)
+val Periwinkle = Color(0xFF344158)
 val Citron = Color(0xFFCCCB66)
-val Lavender = Color(0xFFC1C5E9)
-val Muted = Color(0xFF9AA2DA)
+val Lavender = Color(0xFFF1F4FA)
+val Muted = Color(0xFFA6B1C2)
 val Warn = Color(0xFFFFB4A8)
+val ResponseLine = Color(0xFF999832)
 
 @Composable
 fun SubOnTheme(content: @Composable () -> Unit) {
@@ -19,11 +21,17 @@ fun SubOnTheme(content: @Composable () -> Unit) {
         colorScheme = darkColorScheme(
             primary = Citron,
             onPrimary = ZaffreDark,
-            secondary = Periwinkle,
+            secondary = Muted,
+            onSecondary = Zaffre,
             background = Zaffre,
-            surface = Zaffre,
+            surface = ZaffreDark,
+            surfaceVariant = Periwinkle,
             onBackground = Lavender,
-            onSurface = Lavender
+            onSurface = Lavender,
+            onSurfaceVariant = Muted,
+            outline = Muted,
+            error = Warn,
+            onError = Zaffre
         ),
         content = content
     )

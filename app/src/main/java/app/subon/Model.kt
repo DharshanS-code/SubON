@@ -34,6 +34,8 @@ object Limits {
     const val HIGH_MIN = 40f
     const val HIGH_MAX = 300f
     const val MIN_GAP = 10f
+    const val GAIN_MIN = -12f
+    const val GAIN_MAX = 6f
 }
 
 data class FilterConfig(
@@ -44,12 +46,19 @@ data class FilterConfig(
     val gainDb: Float = 0f,
     val profile: OutputProfile = OutputProfile.WIRED
 ) {
-    fun withRange(low: Float, high: Float): FilterConfig {
-        val l = low.roundToInt().toFloat().coerceIn(Limits.LOW_MIN, Limits.LOW_MAX)
-        val h = high.roundToInt().toFloat()
-            .coerceIn(Limits.HIGH_MIN, Limits.HIGH_MAX)
-            .coerceAtLeast(l + Limits.MIN_GAP)
-        return copy(lowHz = l, highHz = h)
+    fun withRange(low: Float, high: Float): FilterConfig =
+        copy(lowHz = low, highHz = high).normalized()
+
+    /** Shared boundary for persisted values, UI edits and effect parameters. */
+    fun normalized(): FilterConfig {
+        val low = (if (lowHz.isFinite()) lowHz else profile.defaultLow)
+            .coerceIn(Limits.LOW_MIN, Limits.LOW_MAX).roundToInt().toFloat()
+        val high = (if (highHz.isFinite()) highHz else profile.defaultHigh)
+            .coerceIn(Limits.HIGH_MIN, Limits.HIGH_MAX).roundToInt().toFloat()
+            .coerceAtLeast(low + Limits.MIN_GAP)
+        val gain = (if (gainDb.isFinite()) gainDb else 0f)
+            .coerceIn(Limits.GAIN_MIN, Limits.GAIN_MAX)
+        return copy(lowHz = low, highHz = high, gainDb = gain)
     }
 
     fun preset(): Preset =
@@ -67,4 +76,11 @@ object SubOnState {
     val status = MutableStateFlow(EngineStatus(EffectState.OFF))
     @Volatile
     var loaded = false
+
+    @Synchronized
+    fun ensureLoaded(load: () -> FilterConfig) {
+        if (loaded) return
+        config.value = load().normalized()
+        loaded = true
+    }
 }

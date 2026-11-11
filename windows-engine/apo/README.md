@@ -1,6 +1,6 @@
 # SubON Windows APO — implementation status
 
-This directory documents and tests the boundary between a future Windows Audio Processing Object (APO) callback and SubON's DSP core.
+This directory documents the boundary between the Windows Audio Processing Object (APO) implementation in `../src/SubOnNativeApo.cpp` and SubON's DSP core.
 
 ## Existing groundwork
 
@@ -10,11 +10,13 @@ The portable format contract is in `FORMAT-CONTRACT.md`; the bridge and format t
 
 ## Current status — not yet a functional APO
 
-There is **not yet a Windows APO DLL**. The COM/APO implementation, Windows SDK interface integration, real-time processing callback, endpoint registration/package, signing, installer, and endpoint-level validation remain to be implemented. Existing tests validate only portable DSP/buffer behavior.
+The `SubONApo` CMake target implements a COM DLL with explicit exports, Windows SDK APO interfaces, format negotiation and a real-time processing callback. The portable tests exercise its DSP/buffer contracts. Windows compilation does not establish endpoint loading or audible operation.
+
+**Still missing:** a supported endpoint/driver package, signing, reversible installer, desktop-to-APO configuration transport, and endpoint-level audio validation. Do not register the DLL on a production endpoint or replace an OEM effect ad hoc.
 
 ## Next code milestone
 
-Create a separate Windows-only APO DLL target based on Microsoft's documented APO interfaces and SYSVAD sample. Begin with a transparent pass-through implementation and format negotiation; then connect the existing DSP bridge. Keep allocation, locks, file I/O, logging, and UI communication out of the real-time callback.
+Validate the existing DLL on a dedicated Windows test endpoint, then design a supported signed package and reversible installation flow using Microsoft's APO documentation and SYSVAD sample. Add a validated configuration channel without coupling the real-time callback to the desktop UI. Keep allocation, locks, file I/O, logging and UI communication out of that callback.
 
 Do not describe this bridge or a successful DLL compile as system-wide processing. Verify the APO is loaded and processes audio on a real test endpoint before making that claim.
 

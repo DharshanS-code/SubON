@@ -9,7 +9,10 @@ object FilterMath {
     const val MAX_HZ = 20000.0
     const val FLOOR_DB = -60.0
 
-    private fun ratio(count: Int): Double = (MAX_HZ / MIN_HZ).pow(1.0 / count)
+    private fun ratio(count: Int): Double {
+        require(count > 0) { "Band count must be positive" }
+        return (MAX_HZ / MIN_HZ).pow(1.0 / count)
+    }
 
     fun cutoffs(count: Int): FloatArray {
         val r = ratio(count)
@@ -24,6 +27,11 @@ object FilterMath {
     }
 
     fun gainDb(f: Double, c: FilterConfig): Double {
+        require(f.isFinite() && f > 0.0) { "Frequency must be positive and finite" }
+        return normalizedGainDb(f, c.normalized())
+    }
+
+    private fun normalizedGainDb(f: Double, c: FilterConfig): Double {
         val n2 = 2.0 * c.steepness.order
         val hp = 10.0 * log10(1.0 + (c.lowHz / f).pow(n2))
         val lp = 10.0 * log10(1.0 + (f / c.highHz).pow(n2))
@@ -32,6 +40,7 @@ object FilterMath {
 
     fun bandGains(count: Int, c: FilterConfig): FloatArray {
         val centers = centers(count)
-        return FloatArray(count) { i -> gainDb(centers[i], c).toFloat() }
+        val safe = c.normalized()
+        return FloatArray(count) { i -> normalizedGainDb(centers[i], safe).toFloat() }
     }
 }

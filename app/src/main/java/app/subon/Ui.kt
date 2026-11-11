@@ -1,66 +1,27 @@
 package app.subon
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.RangeSlider
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -73,472 +34,271 @@ fun SubOnScreen(
 ) {
     val cfg by SubOnState.config.collectAsState()
     val status by SubOnState.status.collectAsState()
-    val isOn = status.state != EffectState.OFF
-
-    Surface(modifier = Modifier.fillMaxSize(), color = Zaffre, contentColor = Lavender) {
-        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+    var confirmReset by rememberSaveable { mutableStateOf(false) }
+    Surface(Modifier.fillMaxSize(), color = Zaffre, contentColor = Lavender) {
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+            val wide = maxWidth >= 840.dp
             Column(
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(if (wide) 32.dp else 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(12.dp))
-                Header(cfg, status)
-                Spacer(Modifier.height(16.dp))
-
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(176.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(ZaffreDark)
-                ) {
-                    ResponseGraph(cfg, Modifier.fillMaxSize())
+                Column(Modifier.widthIn(max = 1120.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Header(status)
+                    if (wide) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                            Column(Modifier.weight(1.2f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                ResponseSection(cfg)
+                                FilterSection(cfg, onChange)
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                OutputSection(cfg, onChange, onProfile) { confirmReset = true }
+                                EngineSection(status, onPower)
+                            }
+                        }
+                    } else {
+                        ResponseSection(cfg)
+                        FilterSection(cfg, onChange)
+                        OutputSection(cfg, onChange, onProfile) { confirmReset = true }
+                        EngineSection(status, onPower)
+                    }
+                    Text(
+                        "Start at a comfortable volume. An attached effect does not confirm audible or system-wide processing.",
+                        color = Muted, style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                Spacer(Modifier.height(16.dp))
-
-                RangeSection(cfg) { low, high -> onChange { it.withRange(low, high) } }
-                Spacer(Modifier.height(8.dp))
-
-                PresetRow(cfg) { p ->
-                    if (p != Preset.CUSTOM) onChange { it.withRange(p.low, p.high) }
-                }
-                Spacer(Modifier.height(20.dp))
-
-                Text("Steepness", color = Muted, fontSize = 12.5.sp)
-                Spacer(Modifier.height(8.dp))
-                SteepnessRow(cfg) { s -> onChange { it.copy(steepness = s) } }
-                Spacer(Modifier.height(20.dp))
-
-                LimiterRow(cfg) { on -> onChange { it.copy(limiterOn = on) } }
-                Spacer(Modifier.height(12.dp))
-                GainRow(cfg) { g -> onChange { it.copy(gainDb = g) } }
-                Spacer(Modifier.height(12.dp))
-                OutputRow(cfg, onProfile)
-                Spacer(Modifier.height(8.dp))
-
-                val from = cfg.profile.usableFromHz
-                val name = cfg.profile.label.lowercase()
-                val hint = when {
-                    cfg.highHz < from ->
-                        "Your whole range is below what $name can play (about $from Hz). Expect near silence."
-                    cfg.lowHz < from ->
-                        "Part of your range is below what $name can play (about $from Hz)."
-                    else -> "This range fits $name."
-                }
-                Text(
-                    hint,
-                    color = if (cfg.lowHz < from) Warn else Citron,
-                    fontSize = 12.sp
-                )
-                Spacer(Modifier.height(16.dp))
             }
+        }
+    }
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset ${cfg.profile.label.lowercase()}?") },
+            text = { Text("Restore this profile's range, steepness, gain and limiter defaults. Other profiles stay unchanged.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onChange { FilterConfig(lowHz = it.profile.defaultLow, highHz = it.profile.defaultHigh, profile = it.profile) }
+                    confirmReset = false
+                }) { Text("Reset profile") }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
+        )
+    }
+}
 
-            Box(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                PowerSwitch(isOn) { onPower(!isOn) }
+@Composable
+private fun Header(status: EngineStatus) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("SubON", fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp,
+            modifier = Modifier.semantics { heading() })
+        Text("Shape your sound", color = Muted, style = MaterialTheme.typography.bodyLarge)
+        val label = when (status.state) {
+            EffectState.OFF -> "Off"
+            EffectState.ACTIVE -> "Effect attached"
+            EffectState.WAITING -> "Waiting for audio"
+            EffectState.FAILED -> "Needs attention"
+        }
+        Surface(shape = RoundedCornerShape(8.dp), color = ZaffreDark) {
+            Text(label, Modifier.padding(horizontal = 12.dp, vertical = 8.dp).semantics {
+                liveRegion = LiveRegionMode.Polite
+            }, color = if (status.state == EffectState.FAILED) Warn else Lavender,
+                style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun Section(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = ZaffreDark) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.semantics { heading() })
+            Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ResponseSection(cfg: FilterConfig) {
+    var showValues by rememberSaveable { mutableStateOf(false) }
+    Section("Frequency response", "Calculated filter + gain · not a live measurement") {
+        Text("${cfg.lowHz.roundToInt()}–${cfg.highHz.roundToInt()} Hz", style = MaterialTheme.typography.headlineMedium)
+        Text("Level (dB) / frequency (Hz) · excludes limiter dynamics", color = Muted,
+            style = MaterialTheme.typography.bodySmall)
+        ResponseGraph(cfg, Modifier.fillMaxWidth().height(210.dp))
+        TextButton(onClick = { showValues = !showValues }, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(if (showValues) "Hide response values" else "Show response values")
+        }
+        if (showValues) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (hz in listOf(20, 50, 100, 200, 500)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("$hz Hz", style = MaterialTheme.typography.bodyMedium)
+                        Text("${(FilterMath.gainDb(hz.toDouble(), cfg) + cfg.gainDb).roundToInt()} dB",
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterSection(cfg: FilterConfig, onChange: ((FilterConfig) -> FilterConfig) -> Unit) {
+    Section("Filter range", "Keep the low end you want. Each edge is adjustable independently.") {
+        LabeledSlider("Low edge", "${cfg.lowHz.roundToInt()} Hz", cfg.lowHz,
+            Limits.LOW_MIN..minOf(Limits.LOW_MAX, cfg.highHz - Limits.MIN_GAP)) { low ->
+            onChange { it.withRange(low, it.highHz) }
+        }
+        LabeledSlider("High edge", "${cfg.highHz.roundToInt()} Hz", cfg.highHz,
+            maxOf(Limits.HIGH_MIN, cfg.lowHz + Limits.MIN_GAP)..Limits.HIGH_MAX) { high ->
+            onChange { it.withRange(it.lowHz, high) }
+        }
+        Text("Preset · ${cfg.preset().label}", color = Muted, style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (preset in Preset.values().filter { it != Preset.CUSTOM }) {
+                FilterChip(selected = cfg.preset() == preset,
+                    onClick = { onChange { it.withRange(preset.low, preset.high) } },
+                    label = { Text(preset.label) }, modifier = Modifier.heightIn(min = 48.dp))
+            }
+        }
+        Text("Steepness", style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (steepness in Steepness.values()) {
+                FilterChip(selected = cfg.steepness == steepness,
+                    onClick = { onChange { it.copy(steepness = steepness) } },
+                    label = { Text(steepness.label) }, modifier = Modifier.heightIn(min = 48.dp))
             }
         }
     }
 }
 
 @Composable
-private fun Header(cfg: FilterConfig, status: EngineStatus) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        LogoMark(44.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = Lavender)) { append("Sub") }
-                    withStyle(SpanStyle(color = Citron)) { append("ON") }
-                },
-                fontSize = 31.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-0.8).sp
-            )
-            Text(
-                "${cfg.preset().label}, ${cfg.lowHz.roundToInt()} to ${cfg.highHz.roundToInt()} Hz",
-                color = Muted,
-                fontSize = 13.sp
-            )
+private fun LabeledSlider(label: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Text(valueText, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
         }
-        StatusPill(status)
-    }
-    if (status.state != EffectState.OFF && status.detail.isNotEmpty()) {
-        Text(
-            status.detail,
-            color = Muted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 8.dp)
-        )
+        Slider(value = value, onValueChange = { onChange(it.roundToInt().toFloat()) }, valueRange = range,
+            steps = (range.endInclusive - range.start).roundToInt().minus(1).coerceAtLeast(0),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
+                contentDescription = label
+                stateDescription = valueText
+            }, colors = SliderDefaults.colors(thumbColor = Citron, activeTrackColor = Citron, inactiveTrackColor = Periwinkle))
     }
 }
 
 @Composable
-fun LogoMark(markSize: Dp) {
-    Canvas(Modifier.size(markSize)) {
-        val s = this.size.width / 44f
-        fun pt(v: Float): Float = (v + 2f) * s
-        drawRoundRect(Citron, cornerRadius = CornerRadius(13f * s, 13f * s))
-        val path = Path()
-        path.moveTo(pt(30f), pt(13f))
-        path.cubicTo(pt(27f), pt(11f), pt(24f), pt(10f), pt(20f), pt(10f))
-        path.cubicTo(pt(13f), pt(10f), pt(12f), pt(17f), pt(20f), pt(20f))
-        path.cubicTo(pt(28f), pt(23f), pt(27f), pt(30f), pt(20f), pt(30f))
-        path.cubicTo(pt(16f), pt(30f), pt(13f), pt(29f), pt(10f), pt(27f))
-        drawPath(
-            path,
-            Zaffre,
-            style = Stroke(width = 4.6f * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
+private fun OutputSection(cfg: FilterConfig, onChange: ((FilterConfig) -> FilterConfig) -> Unit,
+                          onProfile: (OutputProfile) -> Unit, onReset: () -> Unit) {
+    Section("Output & protection", "Settings are saved separately for each output profile.") {
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick = { menuOpen = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text("Profile: ${cfg.profile.label}")
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                for (profile in OutputProfile.values()) {
+                    DropdownMenuItem(text = { Text(profile.label) }, onClick = {
+                        menuOpen = false
+                        onProfile(profile)
+                    }, modifier = Modifier.semantics { selected = profile == cfg.profile })
+                }
+            }
+        }
+        Text("Profiles are starting points, not hardware detection. Actual bass extension depends on your device.",
+            color = Muted, style = MaterialTheme.typography.bodySmall)
+        LabeledSlider("Output gain", "${if (cfg.gainDb > 0) "+" else ""}${cfg.gainDb.roundToInt()} dB",
+            cfg.gainDb, -12f..6f) { gain -> onChange { it.copy(gainDb = gain) } }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Limiter", style = MaterialTheme.typography.titleSmall)
+                Text("Helps control peaks; does not guarantee distortion-free or safe listening.",
+                    color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = cfg.limiterOn, onCheckedChange = { on -> onChange { it.copy(limiterOn = on) } },
+                modifier = Modifier.semantics { contentDescription = "Limiter" })
+        }
+        if (cfg.gainDb > 0f) {
+            Text("Positive gain can increase clipping and listening volume. Start low.",
+                color = Warn, style = MaterialTheme.typography.bodySmall)
+        }
+        TextButton(onClick = onReset, modifier = Modifier.heightIn(min = 48.dp)) { Text("Reset this profile") }
     }
 }
 
 @Composable
-private fun StatusPill(status: EngineStatus) {
-    val (dot, label) = when (status.state) {
-        EffectState.ACTIVE -> Citron to "Attached"
-        EffectState.WAITING -> Periwinkle to "Waiting"
-        EffectState.FAILED -> Warn to "Failed"
-        EffectState.OFF -> Muted to "Off"
-    }
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(50))
-            .background(ZaffreDark)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .size(9.dp)
-                .clip(CircleShape)
-                .background(dot)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+private fun EngineSection(status: EngineStatus, onPower: (Boolean) -> Unit) {
+    val running = status.state == EffectState.ACTIVE || status.state == EffectState.WAITING
+    Section("Audio engine", "Android audio effects · device and session dependent") {
+        Text(status.detail.ifBlank { "Enable the engine, then start playback in a compatible audio app." },
+            color = if (status.state == EffectState.FAILED) Warn else Lavender,
+            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Button(onClick = { onPower(!running) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            shape = RoundedCornerShape(12.dp)) {
+            Text(if (running) "Turn off engine" else if (status.state == EffectState.FAILED) "Retry audio engine" else "Enable audio engine")
+        }
+        // A failed update leaves the foreground service alive for recovery.
+        // Always offer a way to stop it, including when notifications are denied.
+        if (status.state == EffectState.FAILED) {
+            OutlinedButton(onClick = { onPower(false) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Text("Turn off engine")
+            }
+        }
     }
 }
 
 @Composable
 private fun ResponseGraph(cfg: FilterConfig, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
-    Canvas(modifier) {
-        val left = 16.dp.toPx()
-        val right = size.width - 16.dp.toPx()
-        val top = 16.dp.toPx()
-        val bottom = size.height - 30.dp.toPx()
-        val w = right - left
+    Canvas(modifier.semantics {
+        contentDescription = "Calculated response from 20 to 500 hertz, minus 72 to plus 6 decibels. " +
+            "Pass band ${cfg.lowHz.roundToInt()} to ${cfg.highHz.roundToInt()} hertz; gain ${cfg.gainDb.roundToInt()} decibels. " +
+            "Use Show response values for the numeric values."
+    }) {
         val labelStyle = TextStyle(color = Muted, fontSize = 10.sp)
-
-        fun xOf(hz: Double): Float = left + (ln(hz / 20.0) / ln(25.0)).toFloat() * w
-        fun yOf(db: Double): Float = top + ((6.0 - db) / 66.0).toFloat() * (bottom - top)
-
-        val gridColor = Periwinkle.copy(alpha = 0.35f)
-        for (db in listOf(0.0, -20.0, -40.0)) {
-            val y = yOf(db)
-            drawLine(gridColor, Offset(left, y), Offset(right, y), strokeWidth = 1.dp.toPx())
+        val labelWidth = measurer.measure("-72", labelStyle).size.width.toFloat()
+        val labelHeight = measurer.measure("500 Hz", labelStyle).size.height.toFloat()
+        val left = labelWidth + 10.dp.toPx()
+        val right = size.width - 14.dp.toPx()
+        val top = labelHeight / 2 + 4.dp.toPx()
+        val bottom = size.height - labelHeight - 14.dp.toPx()
+        if (right <= left || bottom <= top) return@Canvas
+        fun xOf(hz: Double) = left + (ln(hz / 20.0) / ln(25.0)).toFloat() * (right - left)
+        fun yOf(db: Double) = top + ((6.0 - db.coerceIn(-72.0, 6.0)) / 78.0).toFloat() * (bottom - top)
+        for (db in listOf(0, -24, -48, -72)) {
+            val y = yOf(db.toDouble())
+            drawLine(Periwinkle, Offset(left, y), Offset(right, y), strokeWidth = 1.dp.toPx())
+            val label = measurer.measure(db.toString(), labelStyle)
+            drawText(label, topLeft = Offset(left - label.size.width - 6.dp.toPx(), y - label.size.height / 2))
         }
-        for (hz in listOf(20.0, 50.0, 100.0, 200.0, 500.0)) {
-            val x = xOf(hz)
-            drawLine(gridColor, Offset(x, top), Offset(x, bottom), strokeWidth = 1.dp.toPx())
-            val text = if (hz == 20.0) "20 Hz" else hz.toInt().toString()
-            val t = measurer.measure(text, labelStyle)
-            val tx = (x - t.size.width / 2f).coerceIn(
-                2.dp.toPx(),
-                size.width - t.size.width - 2.dp.toPx()
-            )
-            drawText(t, topLeft = Offset(tx, bottom + 8.dp.toPx()))
+        // Reduce tick density when system font scaling leaves too little room.
+        val ticks = if (right - left < measurer.measure("500 Hz", labelStyle).size.width * 5)
+            listOf(20, 100, 500) else listOf(20, 50, 100, 200, 500)
+        for (hz in ticks) {
+            val x = xOf(hz.toDouble())
+            val label = measurer.measure(hz.toString(), labelStyle)
+            drawText(label, topLeft = Offset((x - label.size.width / 2).coerceIn(0f, (size.width - label.size.width).coerceAtLeast(0f)), bottom + 8.dp.toPx()))
         }
-
         val line = Path()
-        val fill = Path()
-        fill.moveTo(left, bottom)
-        val steps = 160
-        for (i in 0..steps) {
-            val hz = 20.0 * 25.0.pow(i / steps.toDouble())
+        for (i in 0..160) {
+            val hz = 20.0 * 25.0.pow(i / 160.0)
             val x = xOf(hz)
-            val y = yOf(FilterMath.gainDb(hz, cfg))
+            val y = yOf(FilterMath.gainDb(hz, cfg) + cfg.gainDb)
             if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
-            fill.lineTo(x, y)
         }
-        fill.lineTo(right, bottom)
-        fill.close()
-
-        drawPath(
-            fill,
-            Brush.verticalGradient(
-                listOf(Citron.copy(alpha = 0.45f), Citron.copy(alpha = 0.02f)),
-                startY = top,
-                endY = bottom
-            )
-        )
-        drawPath(
-            line,
-            Citron,
-            style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        val dash = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
+        drawPath(line, ResponseLine, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
         for (hz in listOf(cfg.lowHz.toDouble(), cfg.highHz.toDouble())) {
             val x = xOf(hz)
-            drawLine(
-                Citron.copy(alpha = 0.7f),
-                Offset(x, top),
-                Offset(x, bottom),
-                strokeWidth = 1.dp.toPx(),
-                pathEffect = dash
-            )
-            val c = Offset(x, yOf(FilterMath.gainDb(hz, cfg)))
-            drawCircle(ZaffreDark, 5.dp.toPx(), c)
-            drawCircle(Citron, 5.dp.toPx(), c, style = Stroke(width = 2.dp.toPx()))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RangeSection(cfg: FilterConfig, onRange: (Float, Float) -> Unit) {
-    val span = ln(15.0)
-    fun toPos(hz: Float): Float = (ln(hz / 20.0) / span).toFloat()
-    fun toHz(p: Float): Float = (20.0 * exp(p.toDouble() * span)).toFloat()
-
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column {
-            Text("Low edge", color = Muted, fontSize = 12.5.sp)
-            Text("${cfg.lowHz.roundToInt()} Hz", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text("High edge", color = Muted, fontSize = 12.5.sp)
-            Text("${cfg.highHz.roundToInt()} Hz", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-    RangeSlider(
-        value = toPos(cfg.lowHz)..toPos(cfg.highHz),
-        onValueChange = { r -> onRange(toHz(r.start), toHz(r.endInclusive)) },
-        valueRange = 0f..1f,
-        colors = SliderDefaults.colors(
-            thumbColor = Lavender,
-            activeTrackColor = Citron,
-            inactiveTrackColor = Periwinkle
-        )
-    )
-}
-
-@Composable
-private fun PresetRow(cfg: FilterConfig, onPreset: (Preset) -> Unit) {
-    val current = cfg.preset()
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        for (p in Preset.values()) {
-            val sel = p == current
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(if (sel) Citron else ZaffreDark)
-                    .clickable { onPreset(p) }
-                    .padding(horizontal = 16.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    p.label,
-                    color = if (sel) ZaffreDark else Lavender,
-                    fontSize = 13.sp,
-                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SteepnessRow(cfg: FilterConfig, onSteep: (Steepness) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(50))
-            .background(ZaffreDark)
-            .padding(4.dp)
-    ) {
-        for (s in Steepness.values()) {
-            val sel = s == cfg.steepness
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (sel) Lavender else Color.Transparent)
-                    .clickable { onSteep(s) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    s.label,
-                    color = if (sel) Zaffre else Muted,
-                    fontSize = 13.5.sp,
-                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LimiterRow(cfg: FilterConfig, onToggle: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Limiter", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text("Prevents distortion at high gain", color = Muted, fontSize = 11.5.sp)
-        }
-        Switch(
-            checked = cfg.limiterOn,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = ZaffreDark,
-                checkedTrackColor = Citron,
-                checkedBorderColor = Citron,
-                uncheckedThumbColor = Lavender,
-                uncheckedTrackColor = ZaffreDark,
-                uncheckedBorderColor = Periwinkle
-            )
-        )
-    }
-}
-
-@Composable
-private fun GainRow(cfg: FilterConfig, onGain: (Float) -> Unit) {
-    val g = cfg.gainDb.roundToInt()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Output gain", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Text(if (g > 0) "+$g dB" else "$g dB", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-    }
-    Slider(
-        value = cfg.gainDb,
-        onValueChange = { onGain(it.roundToInt().toFloat()) },
-        valueRange = -12f..6f,
-        steps = 17,
-        colors = SliderDefaults.colors(
-            thumbColor = Lavender,
-            activeTrackColor = Citron,
-            inactiveTrackColor = Periwinkle,
-            activeTickColor = Color.Transparent,
-            inactiveTickColor = Color.Transparent
-        )
-    )
-}
-
-@Composable
-private fun OutputRow(cfg: FilterConfig, onProfile: (OutputProfile) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(ZaffreDark)
-                .clickable { open = true }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Output", color = Muted, fontSize = 13.5.sp)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                cfg.profile.label,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            Text("\u25BE", color = Muted, fontSize = 14.sp)
-        }
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            modifier = Modifier.background(ZaffreDark)
-        ) {
-            for (p in OutputProfile.values()) {
-                DropdownMenuItem(
-                    text = { Text(p.label, color = Lavender) },
-                    onClick = {
-                        open = false
-                        onProfile(p)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PowerSwitch(on: Boolean, onToggle: () -> Unit) {
-    val bg = if (on) Citron else Periwinkle
-    val iconColor = if (on) Citron else Lavender
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(bg)
-            .clickable(onClick = onToggle)
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (on) {
-            Text(
-                "Filter on",
-                color = ZaffreDark,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 20.dp)
-            )
-            PowerKnob(iconColor)
-        } else {
-            PowerKnob(iconColor)
-            Text(
-                "Filter off",
-                color = ZaffreDark,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.End,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun PowerKnob(iconColor: Color) {
-    Box(
-        Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(Zaffre),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(Modifier.size(22.dp)) {
-            val s = size.minDimension
-            val stroke = s * 0.12f
-            val d = s * 0.78f
-            drawArc(
-                iconColor,
-                startAngle = -60f,
-                sweepAngle = 300f,
-                useCenter = false,
-                topLeft = Offset((s - d) / 2f, s - d - stroke / 2f),
-                size = Size(d, d),
-                style = Stroke(width = stroke, cap = StrokeCap.Round)
-            )
-            drawLine(
-                iconColor,
-                Offset(s / 2f, stroke / 2f),
-                Offset(s / 2f, s * 0.48f),
-                strokeWidth = stroke,
-                cap = StrokeCap.Round
-            )
+            drawLine(Muted, Offset(x, top), Offset(x, bottom), strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
+            val point = Offset(x, yOf(FilterMath.gainDb(hz, cfg) + cfg.gainDb))
+            drawCircle(ZaffreDark, 6.dp.toPx(), point)
+            drawCircle(ResponseLine, 4.dp.toPx(), point)
         }
     }
 }

@@ -15,8 +15,13 @@ bool validFilterArgs(double sampleRate, double frequency) noexcept {
 double linearGain(double db) noexcept { return std::pow(10.0, db / 20.0); }
 } // namespace
 
-Biquad::Biquad(double b0, double b1, double b2, double a1, double a2) noexcept
-    : b0_(b0), b1_(b1), b2_(b2), a1_(a1), a2_(a2) {}
+Biquad::Biquad(double b0, double b1, double b2, double a1, double a2)
+    : b0_(b0), b1_(b1), b2_(b2), a1_(a1), a2_(a2) {
+    if (!std::isfinite(b0) || !std::isfinite(b1) || !std::isfinite(b2) ||
+        !std::isfinite(a1) || !std::isfinite(a2)) {
+        throw std::invalid_argument("Filter parameters produce non-finite coefficients");
+    }
+}
 
 Biquad Biquad::lowPass(double sampleRate, double cutoffHz, double q) {
     if (!validFilterArgs(sampleRate, cutoffHz) || !(q > 0.0) || !std::isfinite(q))
@@ -86,9 +91,19 @@ Biquad Biquad::highShelf(double sampleRate, double cutoffHz, double gainDb, doub
 }
 
 double Biquad::process(double input) noexcept {
+    if (!std::isfinite(input)) {
+        reset();
+        return 0.0;
+    }
     const double output = b0_ * input + z1_;
-    z1_ = b1_ * input - a1_ * output + z2_;
-    z2_ = b2_ * input - a2_ * output;
+    const double nextZ1 = b1_ * input - a1_ * output + z2_;
+    const double nextZ2 = b2_ * input - a2_ * output;
+    if (!std::isfinite(output) || !std::isfinite(nextZ1) || !std::isfinite(nextZ2)) {
+        reset();
+        return 0.0;
+    }
+    z1_ = nextZ1;
+    z2_ = nextZ2;
     return output;
 }
 void Biquad::reset() noexcept { z1_ = 0.0; z2_ = 0.0; }
@@ -98,18 +113,28 @@ AudioProcessor::AudioProcessor(const ProcessorConfig& config) { configure(config
 void AudioProcessor::configure(const ProcessorConfig& config) {
     if (!isValidProcessorConfig(config))
         throw std::invalid_argument("Invalid audio processor configuration");
-    config_ = config;
-    bassShelf_ = Biquad::lowShelf(config.sampleRate, 120.0, config.bassDb);
-    trebleShelf_ = Biquad::highShelf(config.sampleRate, 8000.0, config.trebleDb);
+    // Build the replacement first so a rejected configuration cannot leave a
+    // partially reconfigured stream behind.
+    auto bass = Biquad::lowShelf(config.sampleRate, 120.0, config.bassDb);
+    auto treble = Biquad::highShelf(config.sampleRate, 8000.0, config.trebleDb);
+    std::array<Biquad, kEqualizerBandCount> equalizer;
     for (std::size_t i = 0; i < kEqualizerBandCount; ++i)
-        equalizer_[i] = Biquad::peakingEq(config.sampleRate, kEqualizerFrequencies[i],
-                                          config.equalizerDb[i], 1.0);
+        equalizer[i] = Biquad::peakingEq(config.sampleRate, kEqualizerFrequencies[i],
+                                       config.equalizerDb[i], 1.0);
+    config_ = config;
+    bassShelf_ = bass;
+    trebleShelf_ = treble;
+    equalizer_ = equalizer;
+    preampGain_ = linearGain(config.preampDb);
+    // Preserve the 48 kHz release time at every supported sample rate.
+    limiterRelease_ = std::pow(0.9995, 48000.0 / config.sampleRate);
     reset();
 }
 
 double AudioProcessor::process(double input) noexcept {
-    if (!std::isfinite(input)) return 0.0;
-    double output = input * linearGain(config_.preampDb);
+    if (!std::isfinite(input)) { reset(); return 0.0; }
+    double output = input * preampGain_;
+    if (!std::isfinite(output)) { reset(); return 0.0; }
     output = bassShelf_.process(output);
     for (auto& band : equalizer_) output = band.process(output);
     output = trebleShelf_.process(output);
@@ -118,10 +143,9 @@ double AudioProcessor::process(double input) noexcept {
         // Instant attack prevents an over-ceiling peak from passing through;
         // a slower release avoids reopening gain immediately after each peak.
         const double peak = std::abs(output);
-        constexpr double release = 0.9995;
         limiterEnvelope_ = peak >= limiterEnvelope_
             ? peak
-            : (std::max)(peak, limiterEnvelope_ * release);
+            : (std::max)(peak, limiterEnvelope_ * limiterRelease_);
 
         if (limiterEnvelope_ > config_.limiterCeiling) {
             output *= config_.limiterCeiling / limiterEnvelope_;
@@ -160,7 +184,8 @@ bool isValidConfiguration(double sampleRate, double lowCutHz, double highCutHz) 
 }
 
 bool isValidProcessorConfig(const ProcessorConfig& config) noexcept {
-    if (!std::isfinite(config.sampleRate) || config.sampleRate < 32000.0 ||
+    if (!std::isfinite(config.sampleRate) || config.sampleRate <= 32000.0 ||
+        config.sampleRate > 384000.0 ||
         !std::isfinite(config.preampDb) || !std::isfinite(config.bassDb) ||
         !std::isfinite(config.trebleDb) || !std::isfinite(config.limiterCeiling) ||
         config.limiterCeiling <= 0.0 || config.limiterCeiling > 1.0 ||

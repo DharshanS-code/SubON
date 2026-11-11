@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -25,10 +26,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
         prefs = Prefs(this)
-        if (!SubOnState.loaded) {
-            SubOnState.config.value = prefs.load()
-            SubOnState.loaded = true
-        }
+        SubOnState.ensureLoaded { prefs.load() }
         setContent {
             SubOnTheme {
                 SubOnScreen(
@@ -41,7 +39,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun change(block: (FilterConfig) -> FilterConfig) {
-        val next = block(SubOnState.config.value)
+        val next = block(SubOnState.config.value).normalized()
         SubOnState.config.value = next
         prefs.save(next)
     }
@@ -60,10 +58,16 @@ class MainActivity : ComponentActivity() {
             ) {
                 notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, SubOnService::class.java).setAction(SubOnService.ACTION_START)
-            )
+            try {
+                ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, SubOnService::class.java).setAction(SubOnService.ACTION_START)
+                )
+            } catch (e: RuntimeException) {
+                val detail = "Could not start the filter: ${e.message ?: e.javaClass.simpleName}"
+                SubOnState.status.value = EngineStatus(EffectState.OFF, detail)
+                Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+            }
         } else {
             stopService(Intent(this, SubOnService::class.java))
         }

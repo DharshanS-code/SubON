@@ -4,6 +4,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 
 namespace subon::dsp {
 
@@ -29,15 +31,15 @@ public:
             return false;
         }
 
-        const std::size_t sampleCount = frames * channels_;
-        if (frames != 0 && sampleCount / channels_ != frames) {
+        if (frames > (std::numeric_limits<std::size_t>::max)() / sizeof(float) / channels_) {
             return false;
         }
+        const std::size_t sampleCount = frames * channels_;
 
-        if (input != output) {
-            for (std::size_t i = 0; i < sampleCount; ++i) {
-                output[i] = input[i];
-            }
+        if (input != output && sampleCount != 0) {
+            // Preserve sample bits during bypass, including NaN payloads, and
+            // allow overlapping caller-owned buffers without corrupting input.
+            std::memmove(output, input, sampleCount * sizeof(float));
         }
 
         // Bypass is a transparent copy and deliberately does not advance DSP

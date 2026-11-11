@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <vector>
 
 namespace subon::dsp {
 
@@ -33,7 +32,7 @@ private:
     double z1_ = 0.0;
     double z2_ = 0.0;
 
-    Biquad(double b0, double b1, double b2, double a1, double a2) noexcept;
+    Biquad(double b0, double b1, double b2, double a1, double a2);
 };
 
 inline constexpr std::size_t kEqualizerBandCount = 10;
@@ -67,6 +66,8 @@ private:
     std::array<Biquad, kEqualizerBandCount> equalizer_{};
     Biquad bassShelf_{};
     Biquad trebleShelf_{};
+    double preampGain_ = 1.0;
+    double limiterRelease_ = 0.9995;
     double limiterEnvelope_ = 0.0;
 };
 

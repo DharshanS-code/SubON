@@ -5,6 +5,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 namespace subon::dsp {
@@ -26,9 +28,6 @@ public:
         if (channels == 0 || channels > kMaxChannels) {
             throw std::invalid_argument("Unsupported channel count");
         }
-        for (std::size_t channel = 0; channel < channels_; ++channel) {
-            processors_[channel].configure(config);
-        }
     }
 
     InterleavedFloatProcessor(const InterleavedFloatProcessor&) = delete;
@@ -38,14 +37,18 @@ public:
     // No allocations, locks, logging, or OS calls occur in this method.
     bool process(float* interleaved, std::size_t frames,
                  std::size_t channels) noexcept {
-        if ((frames != 0 && interleaved == nullptr) || channels != channels_) {
+        if ((frames != 0 && interleaved == nullptr) || channels != channels_ ||
+            frames > (std::numeric_limits<std::size_t>::max)() / sizeof(float) / channels_) {
             return false;
         }
         for (std::size_t frame = 0; frame < frames; ++frame) {
             for (std::size_t channel = 0; channel < channels_; ++channel) {
                 const std::size_t index = frame * channels_ + channel;
-                interleaved[index] = static_cast<float>(
-                    processors_[channel].process(static_cast<double>(interleaved[index])));
+                const double sample = processors_[channel].process(interleaved[index]);
+                // The DSP works in double precision. Saturate only at the float
+                // representation limit, not at full scale when the limiter is off.
+                constexpr double maximum = (std::numeric_limits<float>::max)();
+                interleaved[index] = static_cast<float>(std::clamp(sample, -maximum, maximum));
             }
         }
         return true;
