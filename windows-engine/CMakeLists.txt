@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(SubOnWindowsEngine VERSION 0.1.0 LANGUAGES CXX)
+project(SubOnWindowsEngine VERSION 1.0.0 LANGUAGES CXX)
 option(SUBON_BUILD_TESTS "Build DSP, format and native integration regression tests" ON)
 option(SUBON_BUILD_DESKTOP_APP "Build Windows desktop prototype" ON)
 option(SUBON_BUILD_VIRTUAL_AUDIO_ROUTER "Build experimental WASAPI virtual audio router" ON)
