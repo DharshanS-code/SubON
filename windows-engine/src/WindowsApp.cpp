@@ -932,7 +932,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     ReleaseDC(nullptr, dc);
     RECT workArea{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-    const int height = std::min(px(920), workArea.bottom - workArea.top);
+    const int height = std::min(px(920), static_cast<int>(workArea.bottom - workArea.top));
     HWND window = CreateWindowExW(WS_EX_CONTROLPARENT, windowClass.lpszClassName,
         L"SubON - Shape your sound", WS_OVERLAPPEDWINDOW | WS_VSCROLL | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, px(700), height, nullptr, nullptr, instance, nullptr);
