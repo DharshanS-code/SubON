@@ -4,7 +4,7 @@
 
 ### TAKE CONTROL OF YOUR LOW END.
 
-**An experimental Android audio-filter application focused on low-frequency control.**
+**An experimental audio application for Android and Windows, with a shared visual identity and native audio engines.**
 
 Tune your frequency range. Shape your sound. Explore your audio.
 
@@ -19,6 +19,63 @@ Tune your frequency range. Shape your sound. Explore your audio.
 </div>
 
 ---
+
+## Platform overview and quick start
+
+| Platform | Implemented scope | Important limit |
+|---|---|---|
+| Android 10+ | Band-pass range, steepness, gain, limiter, per-profile local settings and calculated response | Effect support and app-session coverage vary by device |
+| Windows | Native WAV player, preamp, bass/treble shelves, ten-band EQ, limiter and presets | Processes files opened in SubON, not every application's audio |
+| Windows APO | COM DLL target, float32 negotiation, real-time DSP bridge and contract tests | No supported signed endpoint installer, UI settings transport or hardware validation |
+| Experimental router | WASAPI virtual-endpoint loopback to a separate output | Requires an independently supplied virtual endpoint; no driver is bundled |
+
+The apps use a common dark palette and control hierarchy. Platform audio features remain distinct rather than exposing nonfunctional controls. See [the design contract](docs/design-system.md), [Windows build guide](windows-engine/README.md), [contributor guide](CONTRIBUTING.md), and [audit and verification record](docs/verification.md). Cross-platform screenshots and device interaction checks are required before declaring visual parity verified.
+
+### Android checks
+
+Install JDK 17, Android SDK platform 34 and build tools 34.0.0. The wrapper supplies Gradle 8.2. From the repository root:
+
+```sh
+./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+Output: `app/build/outputs/apk/debug/app-debug.apk`. This is a debug/test APK, not a production-signed release. The included Gradle 8.2 wrapper pins the distribution SHA-256. On Windows use `gradlew.bat`.
+
+### Windows checks
+
+Use Visual Studio C++ tools, Windows SDK and CMake 3.20+:
+
+```powershell
+cmake -S windows-engine -B windows-engine/build -A x64
+cmake --build windows-engine/build --config Release
+ctest --test-dir windows-engine/build -C Release --output-on-failure
+```
+
+Run `windows-engine/build/Release/SubONWindows.exe`, open a supported WAV, start at low volume, and press Play. Stop ends playback; Play restarts from the beginning. No pause/seek capability is implied. The executable is an unsigned prototype. Do not install or register the APO on a production endpoint.
+
+### Portable DSP / WAV tests
+
+On Linux/macOS with C++17, CMake and Ninja:
+
+```sh
+cmake -S windows-engine -B windows-engine/build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build windows-engine/build
+ctest --test-dir windows-engine/build --output-on-failure
+```
+
+Repeat in a separate build directory with `-DCMAKE_BUILD_TYPE=Release`. Portable tests do not launch either native UI or validate a Windows endpoint.
+
+### Local environment and credentials
+
+| Setting | When needed | Configuration |
+|---|---|---|
+| `JAVA_HOME` | Android build | JDK 17 installation directory |
+| `ANDROID_HOME` | Android SDK discovery | SDK installation directory; alternatively use ignored `local.properties` with `sdk.dir=/absolute/path/to/sdk` |
+| `PATH` | Command-line builds | Include Gradle, JDK and CMake/Ninja or Visual Studio tools |
+
+The application has no API keys, account system, remote database or runtime environment variables. Do not invent `.env` credentials. Android signing needs an owner-managed release keystore and private passwords; Windows production distribution needs owner-managed signing and, for APO integration, a supported endpoint package. These are not configured here. Never commit keys, passwords or local machine paths.
+
+GitHub Actions run Android unit tests/lint/build and native checks. Tag releases publish only after their build jobs pass; manual dispatch builds artifacts without publishing a release. No CI result is implied merely by having a workflow file.
 
 ## 📖 Table of Contents
 
@@ -43,7 +100,7 @@ Tune your frequency range. Shape your sound. Explore your audio.
 
 ## 🎧 About SubON
 
-**SubON** is an experimental Android audio-filter application built with Kotlin and Jetpack Compose.
+**SubON** has a Kotlin/Jetpack Compose Android audio-filter application and a native C++ Windows WAV player. The sections below describe the Android feature set; see the platform overview above for Windows capabilities and limits.
 
 The project explores low-frequency audio filtering through an interactive interface. Users can configure lower and upper frequency boundaries, select filter steepness, adjust output gain, toggle the limiter setting, and choose an output profile.
 
@@ -92,7 +149,7 @@ SubON is not a replacement for a calibrated measurement system, dedicated hardwa
 
 ### 🎚️ Adjustable frequency range
 
-Configure the low and high boundaries using an interactive range slider.
+Configure the low and high boundaries using separately labeled, integer-step sliders.
 
 - Low edge: **20–100 Hz**
 - High edge: **40–300 Hz**
@@ -113,7 +170,8 @@ SubON includes a custom-drawn response graph featuring:
 - Decibel reference lines
 - A calculated response curve
 - Markers for the selected low and high edges
-- Shading beneath the response curve
+- A numeric response-values view and labeled axes
+- Configured gain included; limiter dynamics and hardware response excluded
 
 The graph represents the application's calculated filter response. It is not a live acoustic measurement of your speaker, headphones, room, or subwoofer.
 
@@ -190,7 +248,7 @@ The exact result depends on Android and the device implementation. An attached e
 
 ### 🌙 Modern Android interface
 
-The Jetpack Compose interface includes a custom SubON logo mark, dark theme, contrasting accent colors, rounded controls, status indicators, interactive sliders and switches, and a custom frequency-response visualization.
+The Jetpack Compose interface uses SubON's shared dark theme, contrasting accent colors, rounded cards, status labels, wrapping preset controls, accessible sliders and switches, and a calculated response visualization. Wide layouts use two columns; narrow layouts scroll vertically. A confirmed reset restores only the current output profile.
 
 ---
 
@@ -377,7 +435,7 @@ If no APK is attached to a release, build the project from source.
 - Compatible Android SDK build tools
 - Git, if cloning the repository
 
-The repository currently does not include the Gradle wrapper, so these commands require an installed Gradle distribution.
+The repository includes a checksum-pinned Gradle 8.2 wrapper. Use `./gradlew` on Linux/macOS or `gradlew.bat` on Windows; no separate Gradle installation is required.
 
 ### Step 1 — Clone the repository
 
@@ -390,7 +448,7 @@ cd SubON
 
 ```bash
 java -version
-gradle --version
+./gradlew --version
 ```
 
 Confirm that Java 17 and Gradle 8.2 are available.
@@ -400,7 +458,7 @@ Confirm that Java 17 and Gradle 8.2 are available.
 From the repository root, run:
 
 ```bash
-gradle assembleDebug
+./gradlew :app:assembleDebug
 ```
 
 Gradle resolves dependencies and builds the Android application.
@@ -591,7 +649,7 @@ The first development version establishes the Android application structure and 
 
 **Release status:** Experimental.
 
-The release workflow is configured to attach a debug APK to a GitHub Release when triggered by a version tag or manual workflow dispatch. Check the Releases page for an actual published artifact.
+The release workflow builds an Android debug APK and a Windows prototype executable. Version tags publish both after build/test jobs pass; manual dispatch builds artifacts without publishing. Check the Releases page for actual published artifacts.
 
 ---
 
@@ -603,7 +661,7 @@ You are free to use, study, modify, and redistribute this software under the ter
 
 If you distribute copies or modified versions of SubON, you must comply with the applicable GPL-3.0 requirements, including providing the corresponding source code and preserving required notices.
 
-See the [LISENCE](https://github.com/DharshanS-code/SubON/LISENCE ). file for the complete license terms.
+See [LICENSE](LICENSE) for the complete license terms.
 
 SPDX-License-Identifier: GPL-3.0-only
 

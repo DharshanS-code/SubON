@@ -2,6 +2,8 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <cmath>
 
 namespace {
 bool fail(const char* message) {
@@ -54,6 +56,55 @@ int main() {
     RealtimeProcessor unsupported(config, pcm);
     if (unsupported.isSupported()) return fail("PCM format should be rejected"), EXIT_FAILURE;
 
+    for (std::uint32_t rate : {8000u, 16000u, 32000u, 384001u}) {
+        AudioFormat invalid{SampleFormat::Float32, rate, 2, 8};
+        auto invalidConfig = config;
+        invalidConfig.sampleRate = rate;
+        RealtimeProcessor rejected(invalidConfig, invalid);
+        if (rejected.isSupported()) return fail("Unsupported rate accepted"), EXIT_FAILURE;
+    }
+    for (std::uint16_t channels : {0, 9}) {
+        AudioFormat invalid{SampleFormat::Float32, 48000, channels,
+                            static_cast<std::uint16_t>(channels * 4)};
+        RealtimeProcessor rejected(config, invalid);
+        if (rejected.isSupported()) return fail("Unsupported channels accepted"), EXIT_FAILURE;
+    }
+    auto mismatchedConfig = config;
+    mismatchedConfig.sampleRate = 44100;
+    RealtimeProcessor mismatch(mismatchedConfig, stereo);
+    if (mismatch.isSupported()) return fail("DSP and stream sample rates can disagree"), EXIT_FAILURE;
+    if (processor.process(input, guarded, 1, stereo, static_cast<BufferState>(99), true) ||
+        processor.process(input, guarded,
+            (std::numeric_limits<std::size_t>::max)() / sizeof(float) / 2 + 1,
+            stereo, BufferState::Silent, true) ||
+        guarded[0] != 0.125f || guarded[1] != -0.25f)
+        return fail("Invalid state or byte overflow modified output"), EXIT_FAILURE;
+
+    // Silent packets advance exactly the same DSP history as valid zero input.
+    config.bassDb = 12.0;
+    RealtimeProcessor silentTail(config, stereo), explicitZeros(config, stereo);
+    const float impulse[] = {0.8f, 0.0f};
+    float scratchA[2], scratchB[2];
+    silentTail.process(impulse, scratchA, 1, stereo, BufferState::Valid, true);
+    explicitZeros.process(impulse, scratchB, 1, stereo, BufferState::Valid, true);
+    float actual[64], expected[64];
+    const float zeros[64]{};
+    silentTail.process(nullptr, actual, 32, stereo, BufferState::Silent, true);
+    explicitZeros.process(zeros, expected, 32, stereo, BufferState::Valid, true);
+    bool foundTail = false;
+    for (int i = 0; i < 64; ++i) {
+        if (actual[i] != expected[i]) return fail("Silent packet froze filter state"), EXIT_FAILURE;
+        foundTail = foundTail || actual[i] != 0.0f;
+    }
+    if (!foundTail) return fail("Filter-tail regression did not exercise state"), EXIT_FAILURE;
+
+    for (std::uint32_t rate : {32001u, 44100u, 48000u, 96000u, 384000u}) {
+        auto supportedConfig = config;
+        supportedConfig.sampleRate = rate;
+        const AudioFormat valid{SampleFormat::Float32, rate, 8, 32};
+        RealtimeProcessor accepted(supportedConfig, valid);
+        if (!accepted.isSupported()) return fail("Negotiated rate is not constructible"), EXIT_FAILURE;
+    }
     std::cout << "SubON APO real-time processor tests passed\n";
     return EXIT_SUCCESS;
 }

@@ -54,11 +54,32 @@ inline bool describeFloat32Format(const WAVEFORMATEX* waveFormat,
         return false;
     }
 
-    result.sampleFormat = SampleFormat::Float32;
-    result.sampleRate = waveFormat->nSamplesPerSec;
-    result.channels = waveFormat->nChannels;
-    result.blockAlign = waveFormat->nBlockAlign;
-    return validateFloat32Interleaved(result) == FormatStatus::Supported;
+    const AudioFormat parsed{SampleFormat::Float32, waveFormat->nSamplesPerSec,
+                             waveFormat->nChannels, waveFormat->nBlockAlign};
+    if (validateFloat32Interleaved(parsed) != FormatStatus::Supported ||
+        waveFormat->nAvgBytesPerSec != parsed.sampleRate * parsed.blockAlign) {
+        return false;
+    }
+    result = parsed;
+    return true;
+}
+
+// Normalize the conventional mono/stereo layouts when no explicit mask is
+// supplied. Do not treat different surround speaker layouts as interchangeable.
+inline DWORD channelMask(const WAVEFORMATEX* format) noexcept {
+    if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        const auto mask = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format)->dwChannelMask;
+        if (mask != 0) return mask;
+    }
+    return format->nChannels == 1 ? 0x4u : (format->nChannels == 2 ? 0x3u : 0u);
+}
+
+inline bool matchingFloat32Formats(const WAVEFORMATEX* input,
+                                   const WAVEFORMATEX* output) noexcept {
+    AudioFormat in{}, out{};
+    return describeFloat32Format(input, in) && describeFloat32Format(output, out) &&
+           in.sampleRate == out.sampleRate && in.channels == out.channels &&
+           channelMask(input) == channelMask(output);
 }
 
 // Processes one Windows APO connection-buffer pair. Format negotiation,
@@ -66,53 +87,47 @@ inline bool describeFloat32Format(const WAVEFORMATEX* waveFormat,
 // This function itself performs no allocation, locking, logging or OS calls.
 inline HRESULT processConnectionBuffer(
     RealtimeProcessor& processor,
-    const WAVEFORMATEX* negotiatedFormat,
+    const AudioFormat& format,
     APO_CONNECTION_PROPERTY* input,
     APO_CONNECTION_PROPERTY* output,
-    bool effectsEnabled) noexcept {
+    bool effectsEnabled,
+    std::size_t maxFrames) noexcept {
 
-    if (negotiatedFormat == nullptr || input == nullptr || output == nullptr ||
-        output->pBuffer == 0) {
-        return E_POINTER;
-    }
-
-    AudioFormat format{};
-    if (!describeFloat32Format(negotiatedFormat, format) ||
-        !processor.isSupported()) {
+    if (output == nullptr) return E_POINTER;
+    // Snapshot input before clearing output, since in-place connections may
+    // share the property object as well as their sample buffer.
+    const UINT32 frames = input ? input->u32ValidFrameCount : 0;
+    const auto flags = input ? input->u32BufferFlags : BUFFER_INVALID;
+    const auto sourceBuffer = input ? input->pBuffer : 0;
+    output->u32ValidFrameCount = 0;
+    output->u32BufferFlags = BUFFER_INVALID;
+    if (input == nullptr) return E_POINTER;
+    if (!processor.isSupported() ||
+        validateFloat32Interleaved(format) != FormatStatus::Supported) {
         return APOERR_FORMAT_NOT_SUPPORTED;
     }
+    if (flags == BUFFER_INVALID) return S_OK;
+    if (flags != BUFFER_VALID && flags != BUFFER_SILENT) return E_INVALIDARG;
+    if (frames > maxFrames) return E_INVALIDARG;
 
-    if (input->u32ValidFrameCount != output->u32ValidFrameCount) {
+    const auto* source = reinterpret_cast<const float*>(sourceBuffer);
+    auto* destination = reinterpret_cast<float*>(output->pBuffer);
+    const BufferState state = flags == BUFFER_SILENT ? BufferState::Silent : BufferState::Valid;
+    if (!processor.process(source, destination, frames, format, state, effectsEnabled)) {
         return E_INVALIDARG;
     }
 
-    const auto frames = static_cast<std::size_t>(input->u32ValidFrameCount);
-    BufferState state = BufferState::Invalid;
-    if (input->u32BufferFlags == BUFFER_SILENT) {
-        state = BufferState::Silent;
-    } else if (input->u32BufferFlags == BUFFER_VALID) {
-        if (input->pBuffer == 0) {
-            return E_POINTER;
+    output->u32ValidFrameCount = frames;
+    // A silent input can produce a filter tail. Never mark that output silent
+    // or the audio engine may discard the samples we just generated.
+    bool silent = state == BufferState::Silent;
+    if (silent && effectsEnabled) {
+        const std::size_t samples = static_cast<std::size_t>(frames) * format.channels;
+        for (std::size_t i = 0; i < samples; ++i) {
+            if (destination[i] != 0.0f) { silent = false; break; }
         }
-        state = BufferState::Valid;
-    } else {
-        return E_INVALIDARG;
     }
-
-    const auto* source = reinterpret_cast<const float*>(
-        static_cast<std::uintptr_t>(input->pBuffer));
-    auto* destination = reinterpret_cast<float*>(
-        static_cast<std::uintptr_t>(output->pBuffer));
-
-    if (!processor.process(source, destination, frames, format, state,
-                           effectsEnabled)) {
-        return E_INVALIDARG;
-    }
-
-    output->u32ValidFrameCount = input->u32ValidFrameCount;
-    output->u32BufferFlags = state == BufferState::Silent
-        ? BUFFER_SILENT
-        : BUFFER_VALID;
+    output->u32BufferFlags = silent ? BUFFER_SILENT : BUFFER_VALID;
     return S_OK;
 }
 

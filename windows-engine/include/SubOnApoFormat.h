@@ -36,7 +36,9 @@ inline FormatStatus validateFloat32Interleaved(const AudioFormat& format) noexce
     if (format.sampleFormat != SampleFormat::Float32) {
         return FormatStatus::UnsupportedSampleFormat;
     }
-    if (format.sampleRate < 8000 || format.sampleRate > 384000) {
+    // All ten EQ bands must lie below Nyquist (the highest is 16 kHz).
+    // Do not negotiate rates that AudioProcessor cannot construct.
+    if (format.sampleRate <= 32000 || format.sampleRate > 384000) {
         return FormatStatus::InvalidSampleRate;
     }
     if (format.channels == 0 || format.channels > 8) {

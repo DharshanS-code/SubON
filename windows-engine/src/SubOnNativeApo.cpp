@@ -19,7 +19,7 @@ class SubONApo final :
     public IAudioSystemEffects {
 public:
     SubONApo() noexcept { ++g_objects; }
-    ~SubONApo() { releaseFormat(); --g_objects; }
+    ~SubONApo() { --g_objects; }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
@@ -82,17 +82,28 @@ public:
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Initialize(UINT32 size, BYTE* data) override {
-        if (size != 0 || data != nullptr) return E_INVALIDARG;
+        if (initialized_) return APOERR_ALREADY_INITIALIZED;
+        if (size == 0) {
+            if (data != nullptr) return E_INVALIDARG;
+        } else {
+            if (!data || size < sizeof(APOInitBaseStruct)) return E_INVALIDARG;
+            APOInitBaseStruct init{};
+            std::memcpy(&init, data, sizeof(init));
+            if (init.cbSize != size || !IsEqualCLSID(init.clsid, CLSID_SubONApo))
+                return E_INVALIDARG;
+            // System-effects property stores are not used yet. This APO has
+            // fixed default DSP settings; it is not wired to the desktop UI.
+        }
         initialized_ = true;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE IsInputFormatSupported(IAudioMediaType*, IAudioMediaType* requested,
+    HRESULT STDMETHODCALLTYPE IsInputFormatSupported(IAudioMediaType* opposite, IAudioMediaType* requested,
                                                        IAudioMediaType** supported) override {
-        return checkFormat(requested, supported);
+        return checkFormat(opposite, requested, supported);
     }
-    HRESULT STDMETHODCALLTYPE IsOutputFormatSupported(IAudioMediaType*, IAudioMediaType* requested,
+    HRESULT STDMETHODCALLTYPE IsOutputFormatSupported(IAudioMediaType* opposite, IAudioMediaType* requested,
                                                         IAudioMediaType** supported) override {
-        return checkFormat(requested, supported);
+        return checkFormat(opposite, requested, supported);
     }
     HRESULT STDMETHODCALLTYPE GetInputChannelCount(UINT32* count) override {
         if (!count) return E_POINTER;
@@ -102,68 +113,91 @@ public:
 
     HRESULT STDMETHODCALLTYPE LockForProcess(UINT32 inCount, APO_CONNECTION_DESCRIPTOR** inputs,
                                                UINT32 outCount, APO_CONNECTION_DESCRIPTOR** outputs) override {
-        if (!initialized_ || locked_ || inCount != 1 || outCount != 1 ||
-            !inputs || !outputs || !inputs[0] || !outputs[0] ||
-            !inputs[0]->pFormat || !outputs[0]->pFormat) return E_INVALIDARG;
+        if (!initialized_) return APOERR_NOT_INITIALIZED;
+        if (locked_) return APOERR_APO_LOCKED;
+        if (inCount != 1 || outCount != 1 || !inputs || !outputs ||
+            !inputs[0] || !outputs[0] || !inputs[0]->pFormat || !outputs[0]->pFormat ||
+            inputs[0]->u32MaxFrameCount == 0 ||
+            outputs[0]->u32MaxFrameCount < inputs[0]->u32MaxFrameCount) return E_INVALIDARG;
         const WAVEFORMATEX* wf = inputs[0]->pFormat->GetAudioFormat();
         subon::apo::AudioFormat parsed{};
         if (!subon::apo::windows::describeFloat32Format(wf, parsed)) return APOERR_FORMAT_NOT_SUPPORTED;
         const WAVEFORMATEX* outWf = outputs[0]->pFormat->GetAudioFormat();
-        subon::apo::AudioFormat outParsed{};
-        if (!subon::apo::windows::describeFloat32Format(outWf, outParsed) ||
-            parsed.sampleRate != outParsed.sampleRate || parsed.channels != outParsed.channels) {
+        if (!subon::apo::windows::matchingFloat32Formats(wf, outWf)) {
             return APOERR_FORMAT_NOT_SUPPORTED;
         }
-        format_ = parsed;
-        inputs[0]->pFormat->AddRef();
-        formatMediaType_ = inputs[0]->pFormat;
         subon::dsp::ProcessorConfig config{};
-        config.sampleRate = static_cast<double>(format_.sampleRate);
-        processor_.reset(new (std::nothrow) subon::apo::RealtimeProcessor(config, format_));
-        if (!processor_) { releaseFormat(); return E_OUTOFMEMORY; }
+        config.sampleRate = static_cast<double>(parsed.sampleRate);
+        try {
+            auto processor = std::make_unique<subon::apo::RealtimeProcessor>(config, parsed);
+            if (!processor->isSupported()) return APOERR_FORMAT_NOT_SUPPORTED;
+            processor_ = std::move(processor);
+        } catch (const std::bad_alloc&) {
+            return E_OUTOFMEMORY;
+        } catch (...) {
+            return E_INVALIDARG; // C++ exceptions must never cross a COM boundary.
+        }
+        format_ = parsed;
+        maxFrames_ = inputs[0]->u32MaxFrameCount;
         locked_ = true;
-        ++g_locks;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE UnlockForProcess() override {
-        if (locked_) { locked_ = false; --g_locks; }
+        if (!locked_) return APOERR_ALREADY_UNLOCKED;
+        locked_ = false;
         processor_.reset();
-        releaseFormat();
+        format_ = {};
+        maxFrames_ = 0;
         return S_OK;
     }
     void STDMETHODCALLTYPE APOProcess(UINT32 inCount, APO_CONNECTION_PROPERTY** inputs,
                                        UINT32 outCount, APO_CONNECTION_PROPERTY** outputs) override {
-        if (!locked_ || inCount != 1 || outCount != 1 || !inputs || !outputs ||
-            !inputs[0] || !outputs[0]) return;
+        if (!locked_ || !processor_ || inCount != 1 || outCount != 1 || !inputs || !outputs ||
+            !inputs[0] || !outputs[0]) {
+            if (outputs) {
+                for (UINT32 i = 0; i < outCount; ++i) {
+                    if (outputs[i]) {
+                        outputs[i]->u32ValidFrameCount = 0;
+                        outputs[i]->u32BufferFlags = BUFFER_INVALID;
+                    }
+                }
+            }
+            return;
+        }
+        // All format information was copied during LockForProcess; the RT
+        // callback never calls a media-type COM object or allocates memory.
         (void)subon::apo::windows::processConnectionBuffer(
-            *processor_, formatMediaType_->GetAudioFormat(), inputs[0], outputs[0], true);
+            *processor_, format_, inputs[0], outputs[0], true, maxFrames_);
     }
     UINT32 STDMETHODCALLTYPE CalcInputFrames(UINT32 outputFrames) override { return outputFrames; }
     UINT32 STDMETHODCALLTYPE CalcOutputFrames(UINT32 inputFrames) override { return inputFrames; }
 
 private:
-    static HRESULT checkFormat(IAudioMediaType* requested, IAudioMediaType** supported) {
+    static HRESULT checkFormat(IAudioMediaType* opposite, IAudioMediaType* requested,
+                               IAudioMediaType** supported) {
         if (supported) *supported = nullptr;
         if (!requested) return E_POINTER;
         subon::apo::AudioFormat parsed{};
         if (!subon::apo::windows::describeFloat32Format(requested->GetAudioFormat(), parsed))
             return APOERR_FORMAT_NOT_SUPPORTED;
+        if (opposite && !subon::apo::windows::matchingFloat32Formats(
+                opposite->GetAudioFormat(), requested->GetAudioFormat()))
+            return APOERR_FORMAT_NOT_SUPPORTED;
         if (supported) { requested->AddRef(); *supported = requested; }
         return S_OK;
-    }
-    void releaseFormat() noexcept {
-        if (formatMediaType_) { formatMediaType_->Release(); formatMediaType_ = nullptr; }
     }
     std::atomic<ULONG> refs_{1};
     bool initialized_ = false;
     bool locked_ = false;
     subon::apo::AudioFormat format_{};
-    IAudioMediaType* formatMediaType_ = nullptr;
+    UINT32 maxFrames_ = 0;
     std::unique_ptr<subon::apo::RealtimeProcessor> processor_;
 };
 
 class ClassFactory final : public IClassFactory {
 public:
+    ClassFactory() noexcept { ++g_objects; }
+    ~ClassFactory() { --g_objects; }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         if (!out) return E_POINTER;
         *out = nullptr;
@@ -177,6 +211,8 @@ public:
         ULONG n = static_cast<ULONG>(--refs_); if (!n) delete this; return n;
     }
     HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer, REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
         if (outer) return CLASS_E_NOAGGREGATION;
         auto* object = new (std::nothrow) SubONApo();
         if (!object) return E_OUTOFMEMORY;
@@ -185,7 +221,14 @@ public:
         return hr;
     }
     HRESULT STDMETHODCALLTYPE LockServer(BOOL lock) override {
-        if (lock) ++g_locks; else --g_locks;
+        if (lock) {
+            ++g_locks;
+        } else {
+            long locks = g_locks.load();
+            do {
+                if (locks == 0) return E_UNEXPECTED;
+            } while (!g_locks.compare_exchange_weak(locks, locks - 1));
+        }
         return S_OK;
     }
 private:
@@ -194,6 +237,8 @@ private:
 }
 
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
+    if (!out) return E_POINTER;
+    *out = nullptr;
     if (!IsEqualCLSID(clsid, CLSID_SubONApo)) return CLASS_E_CLASSNOTAVAILABLE;
     auto* factory = new (std::nothrow) ClassFactory();
     if (!factory) return E_OUTOFMEMORY;

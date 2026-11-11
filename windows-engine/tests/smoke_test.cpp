@@ -104,6 +104,73 @@ int main() {
             return EXIT_FAILURE;
         }
 
+        // Non-finite samples must not poison a filter permanently.
+        auto recoverable = Biquad::lowPass(48000.0, 120.0);
+        recoverable.process(std::numeric_limits<double>::infinity());
+        const double recovered = recoverable.process(1.0);
+        if (!std::isfinite(recovered) || recovered == 0.0)
+            throw std::runtime_error("Biquad did not recover after non-finite input");
+        ProcessorConfig extremeConfig;
+        extremeConfig.preampDb = 24.0;
+        extremeConfig.limiterEnabled = false;
+        AudioProcessor extreme(extremeConfig);
+        extreme.process((std::numeric_limits<double>::max)());
+        if (!(extreme.process(0.1) > 0.0))
+            throw std::runtime_error("Overflow permanently poisoned processor state");
+
+        // Previously accepted shelf slopes and huge finite gains could create
+        // NaN coefficients during construction rather than rejecting the input.
+        bool rejected = false;
+        try { (void)Biquad::lowShelf(48000.0, 120.0, 18.0, 100.0); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        if (!rejected) throw std::runtime_error("Invalid shelf radicand accepted");
+        rejected = false;
+        try { (void)Biquad::peakingEq(48000.0, 120.0, 1.0e308); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        if (!rejected) throw std::runtime_error("Non-finite filter coefficients accepted");
+
+        // Invalid configure calls must leave both coefficients and history alone.
+        AudioProcessor unchanged(noLimiter), reference(noLimiter);
+        unchanged.process(0.2);
+        reference.process(0.2);
+        auto invalidConfig = noLimiter;
+        invalidConfig.sampleRate = 32000.0;
+        rejected = false;
+        try { unchanged.configure(invalidConfig); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        if (!rejected || unchanged.config().sampleRate != noLimiter.sampleRate ||
+            unchanged.process(0.1) != reference.process(0.1))
+            throw std::runtime_error("Rejected configuration changed processor state");
+        invalidConfig.sampleRate = 384001.0;
+        if (isValidProcessorConfig(invalidConfig))
+            throw std::runtime_error("Excessive sample rate accepted");
+
+        // Release time is measured in seconds rather than callback sample count.
+        ProcessorConfig at48k, at96k;
+        at96k.sampleRate = 96000.0;
+        AudioProcessor release48(at48k), release96(at96k);
+        release48.process(4.0);
+        release96.process(4.0);
+        double output48 = 0.0, output96 = 0.0;
+        for (int i = 0; i < 480; ++i) output48 = release48.process(0.1);
+        for (int i = 0; i < 960; ++i) output96 = release96.process(0.1);
+        if (std::abs(output48 - output96) > 1.0e-10)
+            throw std::runtime_error("Limiter release depends on sample rate");
+
+        // Verify the bass-band filter actually separates low and high tones.
+        auto rms = [](double frequency) {
+            BassBandFilter filter(48000.0, 30.0, 120.0);
+            double energy = 0.0;
+            constexpr double pi = 3.14159265358979323846;
+            for (int i = 0; i < 48000; ++i) {
+                const double output = filter.process(std::sin(2.0 * pi * frequency * i / 48000.0));
+                if (i >= 24000) energy += output * output;
+            }
+            return std::sqrt(energy / 24000.0);
+        };
+        if (!(rms(60.0) > 10.0 * rms(1000.0)))
+            throw std::runtime_error("Bass-band frequency response is incorrect");
+
         std::cout << "SubON DSP tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& e) {

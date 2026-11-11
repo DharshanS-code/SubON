@@ -12,18 +12,32 @@ on:
       - ".github/workflows/windows-dsp.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build-type: [Debug, Release]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Configure CMake
-        run: cmake -S windows-engine -B windows-engine/build -A x64
+      - name: Configure portable core and regressions
+        run: >-
+          cmake -S windows-engine -B windows-engine/build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+          -DSUBON_BUILD_DESKTOP_APP=OFF
+          -DSUBON_BUILD_NATIVE_APO=OFF
+          -DSUBON_BUILD_WINDOWS_APO_ADAPTER=OFF
+          -DSUBON_BUILD_VIRTUAL_AUDIO_ROUTER=OFF
 
       - name: Build DSP core
-        run: cmake --build windows-engine/build --config Release
+        run: cmake --build windows-engine/build --config ${{ matrix.build-type }}
 
-      - name: Run smoke tests
-        run: ctest --test-dir windows-engine/build -C Release --output-on-failure
+      - name: Run regression tests
+        run: ctest --test-dir windows-engine/build -C ${{ matrix.build-type }} --output-on-failure

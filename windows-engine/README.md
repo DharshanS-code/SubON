@@ -4,7 +4,7 @@ SubON is an experimental audio-processing project. The Android app and Windows t
 
 ## Windows audio integration direction
 
-The primary Windows integration path is now a **Windows Audio Processing Object (APO)** that reuses SubON's C++ DSP core. The portable DSP bridge and float32 format contract are groundwork only: there is not yet a Windows APO DLL registered with a playback endpoint, a supported installer, or verified system-wide processing.
+The primary Windows integration path is a **Windows Audio Processing Object (APO)** that reuses SubON's C++ DSP core. The repository includes a native `SubONApo.dll` build target, COM implementation and portable float32 bridge. It does **not** include a supported signed endpoint package/installer, desktop-to-APO settings transport, or verified system-wide processing.
 
 See [the APO implementation notes](apo/README.md) and [the architecture decision](../docs/windows-apo-architecture.md).
 
@@ -12,7 +12,7 @@ The previous WASAPI virtual-audio router remains an experimental prototype only.
 
 ## Windows desktop player
 
-The native C++ desktop player plays WAV files opened inside SubON and applies bass/treble shelves, preamp, 10-band EQ, and limiting. Supported WAV inputs are mono/stereo PCM 16/24/32-bit or IEEE float32, 32–192 kHz.
+The native C++ desktop player plays WAV files opened inside SubON and applies bass/treble shelves, preamp, 10-band EQ, and limiting. Supported WAV inputs are mono/stereo PCM 16/24/32-bit or IEEE float32, sample rates above 32 kHz through 192 kHz. Exactly 32 kHz is rejected because the highest EQ band must be below Nyquist.
 
 ## Build on Windows
 

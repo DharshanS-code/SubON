@@ -3,6 +3,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <cstring>
+#include <cstdint>
 
 namespace {
 bool nearlyEqual(float a, float b, float epsilon = 1.0e-6f) {
@@ -59,6 +62,27 @@ int main() {
     }
     if (!bridge.process(nullptr, nullptr, 0, 2, true)) {
         std::cerr << "Empty buffer should be accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    if (bridge.process(input, untouched,
+            (std::numeric_limits<std::size_t>::max)() / sizeof(float) / 2 + 1, 2, false) ||
+        untouched[0] != original[0] || untouched[1] != original[1]) {
+        std::cerr << "Overflowing bypass changed output\n";
+        return EXIT_FAILURE;
+    }
+    float overlapping[] = {1, 2, 3, 4, 5, 6};
+    if (!bridge.process(overlapping, overlapping + 2, 2, 2, false) ||
+        overlapping[2] != 1 || overlapping[3] != 2 || overlapping[4] != 3 || overlapping[5] != 4) {
+        std::cerr << "Overlapping bypass corrupted samples\n";
+        return EXIT_FAILURE;
+    }
+    const std::uint32_t bits[] = {0x80000000u, 0x7fc01234u, 0x7f800000u, 0xff800000u};
+    float special[4], copied[4];
+    std::memcpy(special, bits, sizeof(bits));
+    if (!bridge.process(special, copied, 2, 2, false) ||
+        std::memcmp(special, copied, sizeof(special)) != 0) {
+        std::cerr << "Bypass did not preserve exact sample bits\n";
         return EXIT_FAILURE;
     }
 

@@ -62,4 +62,4 @@ Official references:
 
 ## Current status
 
-The portable APO DSP bridge and float-format contract have tests, but **there is not yet a Windows APO DLL, endpoint registration, installer, or verified system-wide processing path**. The existing Windows WAV player remains an in-app playback prototype; the virtual audio router remains experimental and is no longer the primary integration plan.
+The repository now contains a Windows-only `SubONApo` DLL target, COM exports, Windows SDK connection adapter, real-time callback, portable DSP bridge and float-format tests. These implement parts of stages 1 and 2; they do not complete endpoint integration. **There is no supported signed endpoint package, installer/uninstaller, desktop-to-APO settings channel, or verified system-wide processing path.** The native WAV player processes files opened inside SubON; the virtual-audio router remains experimental. Real Windows loading, audio behavior and recovery must be tested separately from compilation.

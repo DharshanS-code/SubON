@@ -27,7 +27,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps a system-wide audio filter effect (band-pass) alive" />
+                android:value="Keeps a user-enabled band-pass audio effect alive on supported output mixes or compatible app audio sessions" />
         </service>
     </application>
 </manifest>
