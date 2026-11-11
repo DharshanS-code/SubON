@@ -27,10 +27,13 @@ jobs:
           if (!(Test-Path $exe)) { throw "Windows desktop EXE not produced: $exe" }
           if (!(Test-Path $apo)) { throw "Native APO DLL not produced: $apo" }
 
-          $dumpbin = Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022" -Filter dumpbin.exe -Recurse -ErrorAction SilentlyContinue |
+          # Hosted Windows runners may use different Visual Studio editions/versions.
+          # Search the actual Program Files installation rather than hard-coding VS 2022.
+          $vsRoot = Join-Path $env:ProgramFiles "Microsoft Visual Studio"
+          $dumpbin = Get-ChildItem $vsRoot -Filter dumpbin.exe -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -match "\\VC\\Tools\\MSVC\\.*\\bin\\Hostx64\\x64\\dumpbin.exe$" } |
             Select-Object -First 1 -ExpandProperty FullName
-          if (!$dumpbin) { throw "Visual Studio dumpbin.exe not found; cannot validate APO exports" }
+          if (!$dumpbin) { throw "Visual Studio dumpbin.exe not found under: $vsRoot" }
 
           $exports = & $dumpbin /nologo /exports $apo 2>&1 | Out-String
           if ($LASTEXITCODE -ne 0) { throw "dumpbin failed: $exports" }
