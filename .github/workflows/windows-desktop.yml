@@ -15,18 +15,40 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure CMake
         run: cmake -S windows-engine -B windows-engine/build -A x64
-      - name: Build DSP and desktop app
+      - name: Build DSP, desktop app, and native APO
         run: cmake --build windows-engine/build --config Release
       - name: Run DSP tests
         run: ctest --test-dir windows-engine/build -C Release --output-on-failure
-      - name: Verify executable
+      - name: Verify executable and native APO
         shell: pwsh
         run: |
-          if (!(Test-Path "windows-engine/build/Release/SubONWindows.exe")) { throw "EXE not produced" }
+          $exe = "windows-engine/build/Release/SubONWindows.exe"
+          $apo = "windows-engine/build/Release/SubONApo.dll"
+          if (!(Test-Path $exe)) { throw "Windows desktop EXE not produced: $exe" }
+          if (!(Test-Path $apo)) { throw "Native APO DLL not produced: $apo" }
+
+          # Hosted Windows runners may use different Visual Studio editions/versions.
+          # Search the actual Program Files installation rather than hard-coding VS 2022.
+          $vsRoot = Join-Path $env:ProgramFiles "Microsoft Visual Studio"
+          $dumpbin = Get-ChildItem $vsRoot -Filter dumpbin.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\VC\\Tools\\MSVC\\.*\\bin\\Hostx64\\x64\\dumpbin.exe$" } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (!$dumpbin) { throw "Visual Studio dumpbin.exe not found under: $vsRoot" }
+
+          $exports = & $dumpbin /nologo /exports $apo 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "dumpbin failed: $exports" }
+          foreach ($symbol in @("DllGetClassObject", "DllCanUnloadNow")) {
+            if ($exports -notmatch "(?m)\b$symbol\b") {
+              throw "Required COM export missing from SubONApo.dll: $symbol`n$exports"
+            }
+          }
+          Write-Host "Verified COM exports: DllGetClassObject, DllCanUnloadNow"
       - name: Upload Windows x64 build
         uses: actions/upload-artifact@v4
         with:
           name: SubON-Windows-x64-prototype
-          path: windows-engine/build/Release/SubONWindows.exe
+          path: |
+            windows-engine/build/Release/SubONWindows.exe
+            windows-engine/build/Release/SubONApo.dll
           if-no-files-found: error
           retention-days: 14
