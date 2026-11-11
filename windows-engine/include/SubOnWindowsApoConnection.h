@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <mmreg.h>
 #include <ks.h>
+#include <initguid.h>
 #include <audioenginebaseapo.h>
 
 #include <cstddef>
