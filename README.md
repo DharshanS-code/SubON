@@ -11,7 +11,7 @@ Tune your frequency range. Shape your sound. Explore your audio.
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Language](https://img.shields.io/badge/Kotlin-1.9.22-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
-![Version](https://img.shields.io/badge/Version-0.1.0-CAFF70?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.0-CAFF70?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Experimental-orange?style=for-the-badge)
 
 **[Repository](https://github.com/DharshanS-code/SubON) · [Releases](https://github.com/DharshanS-code/SubON/releases) · [Report a Bug](https://github.com/DharshanS-code/SubON/issues)**
@@ -113,8 +113,8 @@ SubON uses Android's `DynamicsProcessing` audio effect. Actual effect attachment
 | Detail | Information |
 |---|---|
 | Application | SubON |
-| Current project version | `0.1.0` |
-| Version code | `1` |
+| Current project version | `1.0.0` |
+| Version code | `10000` |
 | Platform | Android |
 | Language | Kotlin |
 | UI framework | Jetpack Compose |
@@ -627,6 +627,22 @@ Confirm that the APK download completed successfully and that the Android versio
 ---
 
 ## 📦 Version History
+
+### v1.0.0 — First Stable Project Release
+
+SubON 1.0.0 brings the expanded Android application and native Windows audio work together in the first stable project release.
+
+**Highlights:**
+
+- Refined Android interface, profiles, saved settings, response visualization, tests and lint coverage
+- Native Windows WAV player with preamp, shelves, ten-band EQ, limiter and presets
+- Windows APO COM DLL, format negotiation and real-time DSP bridge with contract tests
+- Experimental WASAPI virtual-audio router target
+- Checked-in Gradle wrapper and reproducible Android build commands
+- Cross-platform DSP regression matrix covering Ubuntu and Windows in Debug and Release
+- Automated Android APK and Windows x64 executable release artifacts
+
+The published Android artifact is a debug APK, and the Windows executable is unsigned. The APO remains an integration target without a signed endpoint installer or production hardware validation.
 
 ### v0.1.0 — Initial Development Release
 

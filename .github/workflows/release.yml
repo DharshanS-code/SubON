@@ -26,7 +26,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Test, lint and build debug APK
+      - name: Test, lint and build APK
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
       - name: Stage APK
@@ -35,13 +35,13 @@ jobs:
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK_PATH" || { echo "::error::Expected APK not found: $APK_PATH"; exit 1; }
           mkdir -p release-assets
-          cp "$APK_PATH" release-assets/SubON-Android-debug.apk
+          cp "$APK_PATH" "release-assets/SubON-Android-${GITHUB_REF_NAME}.apk"
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: SubON-Android
-          path: release-assets/SubON-Android-debug.apk
+          path: release-assets/SubON-Android-*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -67,13 +67,13 @@ jobs:
           $exe = "windows-engine/build/Release/SubONWindows.exe"
           if (!(Test-Path $exe)) { throw "Windows executable not produced: $exe" }
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          Copy-Item $exe "release-assets/SubON-Windows-x64-prototype.exe"
+          Copy-Item $exe "release-assets/SubON-Windows-x64-$env:GITHUB_REF_NAME.exe"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: SubON-Windows-x64
-          path: release-assets/SubON-Windows-x64-prototype.exe
+          path: release-assets/SubON-Windows-x64-*.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -100,8 +100,8 @@ jobs:
       - name: Verify both release assets exist
         shell: bash
         run: |
-          test -s release-assets/SubON-Android-debug.apk
-          test -s release-assets/SubON-Windows-x64-prototype.exe
+          test -s "release-assets/SubON-Android-${GITHUB_REF_NAME}.apk"
+          test -s "release-assets/SubON-Windows-x64-${GITHUB_REF_NAME}.exe"
           ls -lh release-assets
 
       - name: Publish assets to GitHub Release
@@ -109,6 +109,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/SubON-Android-debug.apk
-            release-assets/SubON-Windows-x64-prototype.exe
+            release-assets/SubON-Android-${{ github.ref_name }}.apk
+            release-assets/SubON-Windows-x64-${{ github.ref_name }}.exe
           generate_release_notes: true
